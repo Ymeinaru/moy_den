@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Мой день</title>
+<meta name="description" content="Планировщик дня: задачи, привычки, тайм-блоки и итоги вечера.">
+<meta name="theme-color" content="#0e0c14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f7f5fc" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Мой день">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true" focusable="false">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.6l4.3 4.4L19 7.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-day" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4.5" y="5.5" width="15" height="14.5" rx="2.4"/><path d="M4.5 9.5h15M8.5 3.6v3.4M15.5 3.6v3.4"/><path d="M8.2 13.4h3.4M8.2 16.6h6.2"/></g></symbol>
+  <symbol id="i-habits" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 11.2A7.4 7.4 0 0 1 17 6.6"/><path d="M17.2 3.6v3.4h-3.4"/><path d="M19.4 12.8A7.4 7.4 0 0 1 7 17.4"/><path d="M6.8 20.4v-3.4h3.4"/></g></symbol>
+  <symbol id="i-week" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.6" y="4.6" width="7.2" height="6.2" rx="1.8"/><rect x="13.2" y="4.6" width="7.2" height="6.2" rx="1.8"/><rect x="3.6" y="13.2" width="7.2" height="6.2" rx="1.8"/><rect x="13.2" y="13.2" width="7.2" height="6.2" rx="1.8"/></g></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M5.5 19.5v-7.6M12 19.5V5.5M18.5 19.5v-4.8"/></g></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8h9.4M18.6 8H20M4 16h3.4M12.6 16H20"/><circle cx="16" cy="8" r="2.4"/><circle cx="10" cy="16" r="2.4"/></g></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.6v12.8M5.6 12h12.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="6.2" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="17.8" cy="12" r="1.6"/></g></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5.5 7.5h13M9.5 7.5V5.8c0-.6.4-1 1-1h3c.6 0 1 .4 1 1v1.7M7.2 7.5l.7 11c0 .7.6 1.2 1.3 1.2h5.6c.7 0 1.3-.5 1.3-1.2l.7-11"/></g></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3 1.8"/></g></symbol>
+  <symbol id="i-tomorrow" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h14M14 7.5l4.5 4.5-4.5 4.5"/></g></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M14.5 6.5L9 12l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9.5 6.5L15 12l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="app">
+  <header class="appbar" id="appbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="17" height="17"><use href="#i-check"></use></svg>
+      </span>
+      <span class="brand-name">Мой день</span>
+    </div>
+    <div class="appbar-actions">
+      <button class="sync-dot" id="syncDot" data-state="off" aria-label="Статус синхронизации" title="Статус синхронизации"></button>
+      <button class="icon-btn" id="goSettings" aria-label="Настройки">
+        <svg width="20" height="20" aria-hidden="true"><use href="#i-gear"></use></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ═════════ День ═════════ -->
+  <main id="page-day" class="page" role="tabpanel" aria-labelledby="tab-day" tabindex="-1">
+    <p class="eyebrow">личный планер · план на день</p>
+    <h1>День в вашем ритме</h1>
+    <p class="lede">Задачи, время и привычки. В спокойной теме.</p>
+
+    <div class="datebar">
+      <button class="icon-btn" id="prevDay" aria-label="Предыдущий день">
+        <svg width="20" height="20" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
+      </button>
+      <div class="datebar-main">
+        <span class="date-label" id="dateLabel">—</span>
+        <span class="date-sub" id="dateSub"></span>
+      </div>
+      <button class="icon-btn" id="nextDay" aria-label="Следующий день">
+        <svg width="20" height="20" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+      </button>
+      <button class="btn tiny ghost" id="todayBtn" type="button">Сегодня</button>
+    </div>
+
+    <section class="card card-glow" aria-labelledby="hHabits">
+      <div class="card-head">
+        <h2 id="hHabits">Привычки сегодня</h2>
+        <span class="count" id="habitChipsCount"></span>
+        <span class="spacer"></span>
+        <button class="link-btn" type="button" data-goto="habits">Все</button>
+      </div>
+      <div class="habit-chips" id="habitChips"></div>
+    </section>
+
+    <section class="card" aria-labelledby="hTasks">
+      <div class="card-head">
+        <h2 id="hTasks">Без времени</h2>
+        <span class="count" id="taskCount"></span>
+      </div>
+      <div class="summary">
+        <div class="summary-text" id="summaryText">—</div>
+        <div class="progress" id="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Выполнено за день">
+          <i id="progressBar"></i>
+        </div>
+      </div>
+      <ul class="task-list" id="taskList"></ul>
+      <p class="empty" id="emptyState">Пока пусто. Добавь первую задачу — внизу.</p>
+    </section>
+
+    <section class="card" aria-labelledby="hSchedule">
+      <div class="card-head">
+        <h2 id="hSchedule">Расписание</h2>
+        <span class="count" id="loadCount"></span>
+      </div>
+      <div class="timeline-wrap">
+        <div class="timeline" id="timeline"></div>
+        <div class="blocks" id="blocks"></div>
+      </div>
+      <p class="off-hours" id="offGrid" hidden></p>
+    </section>
+
+    <div class="review-cta" id="reviewCta">
+      <div class="txt" id="reviewText">—</div>
+      <button class="btn tiny primary" id="reviewBtn" type="button">Итоги</button>
+    </div>
+  </main>
+
+  <!-- ═════════ Привычки ═════════ -->
+  <main id="page-habits" class="page" role="tabpanel" aria-labelledby="tab-habits" tabindex="-1" hidden>
+    <p class="eyebrow">личный планер · привычки</p>
+    <h1>Трекер привычек</h1>
+    <p class="lede">Семь маленьких шагов в постоянство.</p>
+
+    <div class="week-nav">
+      <button class="icon-btn" id="habitPrev" aria-label="Предыдущая неделя">
+        <svg width="20" height="20" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
+      </button>
+      <span class="label" id="habitWeekLabel">—</span>
+      <button class="icon-btn" id="habitNext" aria-label="Следующая неделя">
+        <svg width="20" height="20" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+      </button>
+      <button class="btn tiny ghost" id="habitToday" type="button">Эта неделя</button>
+    </div>
+
+    <section class="card card-glow">
+      <div class="card-head">
+        <h2>Привычки</h2>
+        <span class="spacer"></span>
+        <button class="btn tiny primary" id="addHabit" type="button">+ Привычка</button>
+      </div>
+      <div class="habit-list" id="habitList"></div>
+      <p class="empty" id="habitEmpty">Пока нет привычек. Добавь первую — например «читать 20 минут».</p>
+    </section>
+
+    <p class="small-note" id="habitNote"></p>
+  </main>
+
+  <!-- ═════════ Неделя ═════════ -->
+  <main id="page-week" class="page" role="tabpanel" aria-labelledby="tab-week" tabindex="-1" hidden>
+    <p class="eyebrow">личный планер · неделя</p>
+    <h1>Неделя в вашем ритме</h1>
+    <p class="lede">Планы, привычки и время. Прогресс — по кольцам.</p>
+
+    <div class="week-nav">
+      <button class="icon-btn" id="weekPrev" aria-label="Предыдущая неделя">
+        <svg width="20" height="20" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
+      </button>
+      <span class="label" id="weekLabel">—</span>
+      <button class="icon-btn" id="weekNext" aria-label="Следующая неделя">
+        <svg width="20" height="20" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+      </button>
+      <button class="btn tiny ghost" id="weekToday" type="button">Эта неделя</button>
+    </div>
+
+    <div class="week-grid" id="weekGrid"></div>
+    <p class="small-note" id="weekNote"></p>
+  </main>
+
+  <!-- ═════════ Итоги ═════════ -->
+  <main id="page-stats" class="page" role="tabpanel" aria-labelledby="tab-stats" tabindex="-1" hidden>
+    <p class="eyebrow">личный планер · итоги</p>
+    <h1>Итоги и серии</h1>
+    <p class="lede">Что сделано, сколько подряд и как давно.</p>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="num" id="statStreak">0</div><div class="cap">дней подряд</div></div>
+      <div class="stat"><div class="num" id="statBest">0</div><div class="cap">лучшая серия</div></div>
+      <div class="stat"><div class="num" id="statDone7">0</div><div class="cap">сделано за 7 дней</div></div>
+      <div class="stat"><div class="num" id="statRate">0<small>%</small></div><div class="cap">выполнено планов</div></div>
+    </div>
+
+    <section class="card">
+      <div class="card-head"><h2>Последние 14 дней</h2><span class="count" id="barsCount"></span></div>
+      <div class="bars" id="bars" role="img" aria-label="Сколько задач сделано по дням"></div>
+    </section>
+
+    <section class="card" aria-labelledby="hReview">
+      <div class="card-head"><h2 id="hReview">Итоги дня</h2></div>
+      <p class="lede" id="reviewSummary" style="margin-top:0">—</p>
+      <div class="sheet-actions" style="margin-top:14px">
+        <button class="btn primary" id="reviewOpen" type="button">Подвести итоги</button>
+      </div>
+    </section>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="num" id="statAllDone">0</div><div class="cap">задач выполнено</div></div>
+      <div class="stat"><div class="num" id="statAllTime">0<small>ч</small></div><div class="cap">по оценкам</div></div>
+    </div>
+    <p class="small-note" id="statsNote"></p>
+  </main>
+
+  <!-- ═════════ Настройки ═════════ -->
+  <main id="page-settings" class="page" role="tabpanel" aria-labelledby="tab-settings" tabindex="-1" hidden>
+    <p class="eyebrow">личный планер · настройки</p>
+    <h1>Настройки</h1>
+    <p class="lede">Время дня, уведомления и синхронизация.</p>
+
+    <section class="card">
+      <div class="card-head"><h2>День</h2></div>
+      <div class="setting">
+        <span class="label" id="lblDayStart">Начало дня</span>
+        <select class="select" id="setDayStart" aria-labelledby="lblDayStart"></select>
+      </div>
+      <div class="setting">
+        <span class="label" id="lblDayEnd">Конец дня</span>
+        <select class="select" id="setDayEnd" aria-labelledby="lblDayEnd"></select>
+      </div>
+      <div class="setting">
+        <span class="label" id="lblReviewHour">Итоги дня после<span class="sub">когда показывать кнопку</span></span>
+        <select class="select" id="setReviewHour" aria-labelledby="lblReviewHour"></select>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Напоминания</h2></div>
+      <div class="setting">
+        <span class="label" id="lblNotify">Уведомления<span class="sub" id="notifyPermHint">по времени начала задачи</span></span>
+        <label class="switch">
+          <input type="checkbox" id="setNotify" aria-labelledby="lblNotify">
+          <span class="track" aria-hidden="true"></span>
+        </label>
+      </div>
+      <div class="setting">
+        <span class="label" id="lblLead">За сколько минут</span>
+        <select class="select" id="setLead" aria-labelledby="lblLead"></select>
+      </div>
+      <div class="setting">
+        <span class="label">Системное разрешение<span class="sub" id="permState">—</span></span>
+        <button class="btn tiny ghost" id="askNotify" type="button">Разрешить</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Вид</h2></div>
+      <div class="setting">
+        <span class="label" id="lblTheme">Тема</span>
+        <select class="select" id="setTheme" aria-labelledby="lblTheme">
+          <option value="dark">Тёмная</option>
+          <option value="light">Светлая</option>
+          <option value="auto">Как в системе</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Синхронизация</h2></div>
+      <div class="field">
+        <label for="setSbUrl">Project URL</label>
+        <input class="input" id="setSbUrl" type="url" placeholder="https://xxxx.supabase.co"
+               autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="setSbKey">Anon public key</label>
+        <input class="input" id="setSbKey" type="password" placeholder="eyJhbGciOi…"
+               autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="setSpace">Пространство<span class="small-note" style="margin:0"> — одинаковое на всех устройствах</span></label>
+        <input class="input" id="setSpace" placeholder="personal" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="sheet-actions" style="margin-top:14px">
+        <button class="btn primary" id="saveSb" type="button">Подключить</button>
+        <button class="btn ghost" id="clearSb" type="button">Отключить</button>
+      </div>
+      <div class="sync-status">
+        <span class="sync-dot" id="syncDot2" data-state="off" aria-hidden="true"></span>
+        <span id="syncMsg">Локальный режим</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Данные</h2></div>
+      <div class="setting">
+        <span class="label">Экспорт<span class="sub">JSON со всеми днями</span></span>
+        <button class="btn tiny ghost" id="exportJson" type="button">Скачать</button>
+      </div>
+      <div class="setting">
+        <span class="label">Импорт<span class="sub">добавит дни из файла</span></span>
+        <button class="btn tiny ghost" id="importJson" type="button">Выбрать</button>
+      </div>
+      <div class="setting">
+        <span class="label">Календарь<span class="sub">.ics на завтра, с будильником</span></span>
+        <button class="btn tiny ghost" id="exportIcs" type="button">Скачать</button>
+      </div>
+      <div class="setting">
+        <span class="label u-danger">Удалить все дни</span>
+        <button class="btn tiny ghost" id="resetAll" type="button">Сбросить</button>
+      </div>
+    </section>
+
+    <p class="small-note">«Мой день» 1.0 — офлайн-приложение, данные в браузере и в Supabase.</p>
+  </main>
+
+  <div class="quickadd">
+    <form id="quickForm" autocomplete="off">
+      <label class="sr-only" for="quickInput">Новая задача</label>
+      <input id="quickInput" name="title" placeholder="Что нужно сделать?" maxlength="200"
+             autocomplete="off" enterkeyhint="done">
+      <button class="add-btn" id="quickAdd" type="submit" aria-label="Добавить задачу">
+        <svg width="20" height="20" aria-hidden="true"><use href="#i-plus"></use></svg>
+      </button>
+    </form>
+  </div>
+
+  <nav class="tabbar" role="tablist" aria-label="Разделы">
+    <button class="tab" role="tab" id="tab-day" aria-controls="page-day" aria-selected="true">
+      <svg aria-hidden="true"><use href="#i-day"></use></svg>День
+    </button>
+    <button class="tab" role="tab" id="tab-habits" aria-controls="page-habits" aria-selected="false" tabindex="-1">
+      <svg aria-hidden="true"><use href="#i-habits"></use></svg>Привычки
+    </button>
+    <button class="tab" role="tab" id="tab-week" aria-controls="page-week" aria-selected="false" tabindex="-1">
+      <svg aria-hidden="true"><use href="#i-week"></use></svg>Неделя
+    </button>
+    <button class="tab" role="tab" id="tab-stats" aria-controls="page-stats" aria-selected="false" tabindex="-1">
+      <svg aria-hidden="true"><use href="#i-chart"></use></svg>Итоги
+    </button>
+    <button class="tab" role="tab" id="tab-settings" aria-controls="page-settings" aria-selected="false" tabindex="-1">
+      <svg aria-hidden="true"><use href="#i-gear"></use></svg>Ещё
+    </button>
+  </nav>
+</div>
+
+<div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="fileImport" accept="application/json,.json" hidden>
+
+<script src="config.js"></script>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
