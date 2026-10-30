@@ -111,6 +111,13 @@ int main(int argc, const char *argv[]) {
             printf("expr:    %s\n", [evalSync(web, code) UTF8String]);
         }
 
+        const char *expr2 = getenv("SNAP_EXPR2");
+        if (expr2) {
+            pump(0.6);
+            NSString *code2 = [NSString stringWithUTF8String:expr2];
+            printf("expr2:   %s\n", [evalSync(web, code2) UTF8String]);
+        }
+
         double snapH = H;
         if (full) {
             NSString *raw = evalSync(web, @"String(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight))");

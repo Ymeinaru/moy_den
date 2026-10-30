@@ -90,7 +90,9 @@
       <button class="btn tiny ghost" id="todayBtn" type="button">Сегодня</button>
     </div>
 
-    <section class="card card-glow" aria-labelledby="hHabits">
+    <div class="day-cols">
+      <div class="day-col side">
+        <section class="card card-glow" aria-labelledby="hHabits">
       <div class="card-head">
         <h2 id="hHabits">Привычки сегодня</h2>
         <span class="count" id="habitChipsCount"></span>
@@ -98,9 +100,9 @@
         <button class="link-btn" type="button" data-goto="habits">Все</button>
       </div>
       <div class="habit-chips" id="habitChips"></div>
-    </section>
+        </section>
 
-    <section class="card" aria-labelledby="hXp">
+        <section class="card" aria-labelledby="hXp">
       <div class="card-head">
         <h2 id="hXp">Опыт</h2>
         <span class="count" id="xpToday"></span>
@@ -121,9 +123,11 @@
       </div>
       <div class="skill-chips" id="skillChips"></div>
       <p class="decay-note" id="decayNote" role="status" aria-live="polite" hidden></p>
-    </section>
+        </section>
 
-    <section class="card" aria-labelledby="hTasks">
+      </div>
+      <div class="day-col main">
+        <section class="card" aria-labelledby="hTasks">
       <div class="card-head">
         <h2 id="hTasks">Без времени</h2>
         <span class="count" id="taskCount"></span>
@@ -136,9 +140,9 @@
       </div>
       <ul class="task-list" id="taskList"></ul>
       <p class="empty" id="emptyState">Пока пусто. Добавь первую задачу — внизу.</p>
-    </section>
+        </section>
 
-    <section class="card" aria-labelledby="hSchedule">
+        <section class="card" aria-labelledby="hSchedule">
       <div class="card-head">
         <h2 id="hSchedule">Расписание</h2>
         <span class="count" id="loadCount"></span>
@@ -148,7 +152,10 @@
         <div class="blocks" id="blocks"></div>
       </div>
       <p class="off-hours" id="offGrid" role="status" aria-live="polite" hidden></p>
-    </section>
+        </section>
+
+      </div>
+    </div>
 
     <div class="review-cta" id="reviewCta">
       <div class="txt" id="reviewText">—</div>
@@ -358,6 +365,44 @@
     </section>
 
     <section class="card">
+      <div class="card-head"><h2>Аккаунт</h2></div>
+      <p class="small-note" style="margin:4px 0 10px" id="authHint">Вход по ссылке на почту — без пароля. Нужен, если хочешь закрыть таблицу от посторонних.</p>
+
+      <div id="authSignedOut">
+        <div class="field" style="margin-top:0">
+          <label for="authEmail">Почта</label>
+          <input class="input" id="authEmail" type="email" placeholder="you@example.com"
+                 autocomplete="email" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="sheet-actions" style="margin-top:12px">
+          <button class="btn primary" id="authSend" type="button">Отправить ссылку</button>
+        </div>
+      </div>
+
+      <div id="authSignedIn" hidden>
+        <div class="setting">
+          <span class="label">Вы вошли<span class="sub" id="authEmailLabel"></span></span>
+          <button class="btn tiny ghost" id="authSignOut" type="button">Выйти</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Push при закрытом приложении</h2></div>
+      <div class="setting">
+        <span class="label" id="lblPush">Уведомления<span class="sub">работают, даже если приложение закрыто</span></span>
+        <label class="switch">
+          <input type="checkbox" id="setPush">
+          <span class="track" aria-hidden="true"></span>
+        </label>
+      </div>
+      <div class="sync-status">
+        <span class="sync-dot" id="pushDot" data-state="off" aria-hidden="true"></span>
+        <span id="pushMsg">Не включено</span>
+      </div>
+    </section>
+
+    <section class="card">
       <div class="card-head"><h2>Данные</h2></div>
       <div class="setting">
         <span class="label">Экспорт<span class="sub">JSON со всеми днями</span></span>
@@ -370,6 +415,10 @@
       <div class="setting">
         <span class="label">Календарь<span class="sub">.ics на завтра, с будильником</span></span>
         <button class="btn tiny ghost" id="exportIcs" type="button" aria-label="Скачать .ics на завтра">Скачать</button>
+      </div>
+      <div class="setting">
+        <span class="label">Печать / PDF<span class="sub">текущий экран через диалог печати</span></span>
+        <button class="btn tiny ghost" id="printView" type="button" aria-label="Печать или сохранение в PDF">Печать</button>
       </div>
       <div class="setting">
         <span class="label u-danger">Удалить все дни</span>

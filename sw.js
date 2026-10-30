@@ -1,5 +1,5 @@
 /* Service worker: оболочка приложения — из кэша, Supabase — всегда из сети. */
-const CACHE = 'moy-den-v4';
+const CACHE = 'moy-den-v7';
 const ASSETS = [
   './',
   'index.html',
@@ -51,6 +51,37 @@ self.addEventListener('fetch', (event) => {
         .catch(() => null);
 
       return hit || network.then((response) => response || new Response('', { status: 504 }));
+    })
+  );
+});
+
+/* ── push при закрытом приложении ── */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
+
+  const title = data.title || 'Мой день';
+  const options = {
+    body: data.body || '',
+    tag: data.tag || 'den-push',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    data: { url: data.url || './' }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || './';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url.indexOf(self.registration.scope) === 0) return client.focus();
+      }
+      return self.clients.openWindow(url);
     })
   );
 });

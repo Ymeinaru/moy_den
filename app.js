@@ -15,6 +15,13 @@
   var SKILLS_KEY = 'skills';
   var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   var HABIT_XP = 0.25;
+  var REPEATS = [
+    { id: '', label: 'Не повторять' },
+    { id: 'day', label: 'Каждый день' },
+    { id: 'weekdays', label: 'По будням' },
+    { id: 'week', label: 'Раз в неделю' },
+    { id: 'month', label: 'Раз в месяц' }
+  ];
   var LEVEL_BASE = 50;
   var LEVEL_STEP = 25;
 
@@ -133,15 +140,41 @@
     return many;
   }
 
-  function toast(text) {
+  function toast(text, actionLabel, onAction) {
     var node = $('toast');
-    node.textContent = text;
-    node.classList.add('show');
     clearTimeout(node._t);
-    node._t = setTimeout(function () {
+    node.textContent = '';
+    node.classList.toggle('has-action', !!(actionLabel && onAction));
+
+    var label = el('span');
+    label.textContent = text;
+    node.appendChild(label);
+
+    function hide() {
       node.classList.remove('show');
-      setTimeout(function () { node.textContent = ''; }, 300);
-    }, 5000);
+      setTimeout(function () {
+        if (!node.classList.contains('show')) {
+          node.textContent = '';
+          node.classList.remove('has-action');
+        }
+      }, 300);
+    }
+
+    if (actionLabel && onAction) {
+      var action = el('button', 'toast-action');
+      action.type = 'button';
+      action.textContent = actionLabel;
+      action.onclick = function () {
+        hide();
+        try { onAction(); } catch (e) { console.error(e); }
+      };
+      node.appendChild(action);
+      node._t = setTimeout(hide, 6500);
+    } else {
+      node._t = setTimeout(hide, 5000);
+    }
+
+    node.classList.add('show');
   }
 
   function announce(text) {
@@ -152,6 +185,48 @@
   }
 
   function estOf(task) { return Number(task.est) > 0 ? Number(task.est) : DEFAULT_EST; }
+
+  function spentOf(task) { return Number(task.spent) > 0 ? Number(task.spent) : 0; }
+
+  /* Для опыта берём фактическое время, если оно учтено, иначе оценку. */
+  function xpMinutes(task) {
+    var spent = spentOf(task);
+    return spent > 0 ? spent : estOf(task);
+  }
+
+  function runningMinutes(task) {
+    if (!task.timerStart) return 0;
+    return Math.max(1, Math.round((Date.now() - task.timerStart) / 60000));
+  }
+
+  function stopTimer(task) {
+    if (!task || !task.timerStart) return 0;
+    var mins = runningMinutes(task);
+    task.spent = (Number(task.spent) || 0) + mins;
+    task.timerStart = null;
+    task.updatedAt = Date.now();
+    return mins;
+  }
+
+  function nextRepeatDate(date, rule) {
+    if (!rule) return '';
+    var d = parseYmd(date);
+    if (rule === 'day') return shiftYmd(date, 1);
+    if (rule === 'week') return shiftYmd(date, 7);
+    if (rule === 'weekdays') {
+      do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+      return ymd(d);
+    }
+    if (rule === 'month') {
+      var day = d.getDate();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      var last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(day, last));
+      return ymd(d);
+    }
+    return '';
+  }
 
   function sortTasks(a, b) {
     if (!!a.done !== !!b.done) return a.done ? 1 : -1;
@@ -284,9 +359,17 @@
     var habits = habitsDoc().items;
     var today = todayStr();
 
+    var known = {};
+    skillsDoc().items.forEach(function (s) { known[s.id] = 1; });
+
+    function realSkill(id) {
+      return (id && known[id]) ? id : 'other';
+    }
+
     var earned = {};
     var last = {};
     var todayXp = 0;
+    var badMarks = 0;
 
     function add(sid, gain, date) {
       earned[sid] = (earned[sid] || 0) + gain;
@@ -298,17 +381,29 @@
 
       (map[date].tasks || []).forEach(function (t) {
         if (!t.done) return;
-        var gain = estOf(t) / 60;
-        add(t.skill || 'other', gain, date);
+        var gain = xpMinutes(t) / 60;
+        add(realSkill(t.skill), gain, date);
         if (date === today) todayXp += gain;
       });
 
       habits.forEach(function (h) {
+        if (h.kind === 'bad') return;
         if (!(h.checks && h.checks[date])) return;
-        add(h.skill || 'other', HABIT_XP, date);
+        add(realSkill(h.skill), HABIT_XP, date);
         if (date === today) todayXp += HABIT_XP;
       });
     });
+
+    /* вредные привычки: каждая отметка — минус 1 XP, размазанный по всем навыкам */
+    habits.forEach(function (h) {
+      if (h.kind !== 'bad') return;
+      Object.keys(h.checks || {}).forEach(function (d) {
+        if (DATE_RE.test(d) && h.checks[d]) badMarks += 1;
+      });
+    });
+
+    var skillCount = Math.max(1, skillsDoc().items.length);
+    var badShare = badMarks / skillCount;
 
     var bySkill = {};
     var total = 0;
@@ -317,14 +412,18 @@
 
     Object.keys(earned).forEach(function (sid) {
       var d = decayFor(earned[sid], last[sid]);
+      var share = earned[sid] > 0 ? badShare : 0;
+      var effective = Math.max(0, d.effective - share);
       bySkill[sid] = {
         earned: earned[sid],
-        effective: d.effective,
-        penalty: d.penalty,
+        effective: effective,
+        decay: d.penalty,
+        badShare: share,
+        penalty: (earned[sid] - effective),
         idle: d.idle,
         days: d.days
       };
-      total += d.effective;
+      total += effective;
       penaltyTotal += d.penalty;
       if (d.penalty > 0) {
         idlePenalties.push({ id: sid, penalty: d.penalty, idle: d.idle });
@@ -338,8 +437,38 @@
       today: todayXp,
       bySkill: bySkill,
       idlePenalties: idlePenalties,
-      penalty: penaltyTotal
+      penalty: penaltyTotal,
+      badMarks: badMarks,
+      badShare: badShare
     };
+  }
+
+  function habitStreak(habit) {
+    var checks = habit.checks || {};
+    var count = 0;
+    var date = todayStr();
+    for (var i = 0; i < 1000; i++) {
+      if (checks[date]) count += 1;
+      else if (i > 0) break;
+      date = shiftYmd(date, -1);
+    }
+    return count;
+  }
+
+  function habitBest(habit) {
+    var checks = habit.checks || {};
+    var dates = Object.keys(checks).filter(function (d) {
+      return DATE_RE.test(d) && checks[d];
+    }).sort();
+    var best = 0;
+    var run = 0;
+    var prev = null;
+    dates.forEach(function (d) {
+      run = (prev && shiftYmd(prev, 1) === d) ? run + 1 : 1;
+      if (run > best) best = run;
+      prev = d;
+    });
+    return best;
   }
 
   function habitsStat(date) {
@@ -406,8 +535,11 @@
 
     var meta = el('span', 'task-meta');
     var parts = [];
-    if (t.est) parts.push(fmtDur(t.est));
+    if (t.timerStart) parts.push('⏱ ' + fmtDur(runningMinutes(t)));
+    else if (spentOf(t)) parts.push(fmtDur(spentOf(t)) + ' факт');
+    else if (t.est) parts.push(fmtDur(t.est));
     if (t.start) parts.push('в ' + t.start);
+    if (t.repeat) parts.push('↻');
     if (t.note) parts.push('заметка');
     parts.push(PRIO_NAME[t.prio || 'med']);
     meta.textContent = parts.join(' · ');
@@ -669,13 +801,24 @@
     }
 
     var note = $('decayNote');
+    var notes = [];
+
     if (xp.idlePenalties.length) {
-      note.hidden = false;
-      note.textContent = 'Опыт понижен: ' + xp.idlePenalties.map(function (r) {
+      notes.push('Опыт понижен: ' + xp.idlePenalties.map(function (r) {
         var sk = skillById(r.id);
         return sk.name + ' −' + fmtXp(r.penalty) + ' XP (' + r.idle + ' ' +
           plural(r.idle, 'день', 'дня', 'дней') + ' без занятий)';
-      }).join(' · ');
+      }).join(' · '));
+    }
+
+    if (xp.badMarks > 0) {
+      notes.push('Срывы: ' + xp.badMarks + ' × −1 XP (по −' + fmtXp(xp.badShare) +
+        ' с каждого навыка)');
+    }
+
+    if (notes.length) {
+      note.hidden = false;
+      note.textContent = notes.join(' · ');
     } else {
       note.hidden = true;
       note.textContent = '';
@@ -691,8 +834,10 @@
     $('levelTitleBig').textContent = 'Уровень ' + info.level;
     $('levelNumsBig').textContent = fmtXp(info.into) + ' из ' + info.need + ' XP';
     $('levelBarBig').style.width = pct + '%';
-    $('levelTotalXp').textContent = 'всего ' + fmtXp(xp.total) + ' XP' +
-      (xp.penalty > 0 ? ' · −' + fmtXp(xp.penalty) + ' за простой' : '');
+    var levelNote = '';
+    if (xp.penalty > 0) levelNote += ' · −' + fmtXp(xp.penalty) + ' за простой';
+    if (xp.badMarks > 0) levelNote += ' · −' + xp.badMarks + ' за срывы';
+    $('levelTotalXp').textContent = 'всего ' + fmtXp(xp.total) + ' XP' + levelNote;
 
     var items = skillsDoc().items.map(function (sk) {
       var v = xp.bySkill[sk.id] || { effective: 0, penalty: 0, idle: 0 };
@@ -773,11 +918,12 @@
     }
 
     items.forEach(function (h) {
+      var isBad = h.kind === 'bad';
       var on = habitDone(h, state.date);
-      var btn = el('button', 'habit-chip');
+      var btn = el('button', 'habit-chip' + (isBad ? ' is-bad' : ''));
       btn.type = 'button';
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-      btn.setAttribute('aria-label', h.name);
+      btn.setAttribute('aria-label', isBad ? ('Срыв: ' + h.name) : h.name);
       btn.dataset.fkey = 'habit:' + h.id;
 
       var tick = el('span', 'tick');
@@ -843,7 +989,8 @@
     $('habitEmpty').hidden = items.length > 0;
 
     items.forEach(function (h) {
-      var row = el('div', 'habit-row');
+      var isBad = h.kind === 'bad';
+      var row = el('div', 'habit-row' + (isBad ? ' is-bad' : ''));
 
       var top = el('div', 'habit-top');
       var nameBtn = el('button', 'habit-name');
@@ -854,16 +1001,38 @@
       nameBtn.onclick = function () { habitSheet(h.id); };
       top.appendChild(nameBtn);
 
+      if (isBad) {
+        var kindTag = el('span', 'habit-kind');
+        kindTag.textContent = 'вредная';
+        top.appendChild(kindTag);
+      }
+
       if (h.time) {
         var time = el('span', 'habit-time');
         time.textContent = h.time;
         top.appendChild(time);
       }
 
+      var streak = isBad ? 0 : habitStreak(h);
+      if (streak > 0) {
+        var fire = el('span', 'habit-streak');
+        fire.textContent = '🔥 ' + streak;
+        fire.title = 'Лучшая серия: ' + habitBest(h);
+        fire.setAttribute('aria-label', 'серия ' + streak + ' ' +
+          plural(streak, 'день', 'дня', 'дней') + ' подряд');
+        top.appendChild(fire);
+      }
+
       var doneCount = days.filter(function (d) { return habitDone(h, d); }).length;
-      var pct = Math.round(doneCount / 7 * 100);
+      var pct = isBad
+        ? Math.round((7 - doneCount) / 7 * 100)
+        : Math.round(doneCount / 7 * 100);
+
       var pctNode = el('span', 'habit-pct');
-      pctNode.textContent = doneCount + ' из 7 · ' + pct + '%';
+      pctNode.textContent = isBad
+        ? 'срывов ' + doneCount + ' · чисто ' + pct + '%'
+        : doneCount + ' из 7 · ' + pct + '%';
+      if (isBad && doneCount > 0) pctNode.classList.add('u-danger');
       top.appendChild(pctNode);
       row.appendChild(top);
 
@@ -873,8 +1042,10 @@
         var dot = el('button', 'day-dot');
         dot.type = 'button';
         dot.setAttribute('aria-pressed', on ? 'true' : 'false');
-        dot.setAttribute('aria-label', WD_SHORT[parseYmd(d).getDay()] + ', ' + shortDate(d));
+        dot.setAttribute('aria-label', WD_SHORT[parseYmd(d).getDay()] + ', ' + shortDate(d) +
+          (isBad ? (on ? ' — срыв' : ' — без срыва') : ''));
         dot.dataset.fkey = 'habit:' + h.id + ':' + d;
+        if (isBad && on) dot.classList.add('is-bad');
         if (d === todayStr()) dot.classList.add('is-today');
         if (d > todayStr()) dot.disabled = true;
 
@@ -889,7 +1060,7 @@
       });
       row.appendChild(dayBox);
 
-      var bar = el('div', 'habit-bar');
+      var bar = el('div', 'habit-bar' + (isBad ? ' is-bad' : ''));
       var fill = el('i');
       fill.style.width = pct + '%';
       bar.appendChild(fill);
@@ -898,13 +1069,21 @@
       box.appendChild(row);
     });
 
-    var totalMarks = 0;
+    var goodMarks = 0;
+    var badMarks = 0;
     items.forEach(function (h) {
-      days.forEach(function (d) { if (habitDone(h, d)) totalMarks++; });
+      days.forEach(function (d) {
+        if (!habitDone(h, d)) return;
+        if (h.kind === 'bad') badMarks += 1;
+        else goodMarks += 1;
+      });
     });
-    $('habitNote').textContent = items.length
-      ? 'Отмечено ' + totalMarks + ' из ' + (items.length * 7) + ' за неделю.'
-      : 'Привычка — это один маленький шаг, который повторяется. Начни с одной.';
+
+    var note = '';
+    if (goodMarks) note += 'Полезных отметок: ' + goodMarks + '. ';
+    if (badMarks) note += 'Срывов за неделю: ' + badMarks + ' (−' + badMarks + ' XP). ';
+    $('habitNote').textContent = note ||
+      'Привычка — это один маленький шаг, который повторяется. Начни с одной.';
   }
 
   /* ───────────────────────── Рендер: неделя ───────────────────────── */
@@ -1150,7 +1329,8 @@
     var draft = {
       prio: task ? (task.prio || 'med') : ((preset && preset.prio) || 'med'),
       est: task ? estOf(task) : DEFAULT_EST,
-      skill: task ? (task.skill || 'other') : (Den.getSettings().lastSkill || 'other')
+      skill: task ? (task.skill || 'other') : (Den.getSettings().lastSkill || 'other'),
+      repeat: task ? (task.repeat || '') : ''
     };
 
     openSheet(function (sheet) {
@@ -1218,6 +1398,28 @@
       fSkill.appendChild(lSkill);
       fSkill.appendChild(skillChips);
       sheet.appendChild(fSkill);
+
+      var fRep = el('div', 'field');
+      var lRep = el('span', 'field-label');
+      lRep.textContent = 'Повтор';
+      var repChips = el('div', 'chips');
+      REPEATS.forEach(function (r) {
+        var chip = el('button', 'chip');
+        chip.type = 'button';
+        chip.dataset.repeat = r.id;
+        chip.textContent = r.label;
+        chip.setAttribute('aria-pressed', draft.repeat === r.id ? 'true' : 'false');
+        chip.onclick = function () {
+          draft.repeat = r.id;
+          Array.prototype.forEach.call(repChips.children, function (c) {
+            c.setAttribute('aria-pressed', c.dataset.repeat === draft.repeat ? 'true' : 'false');
+          });
+        };
+        repChips.appendChild(chip);
+      });
+      fRep.appendChild(lRep);
+      fRep.appendChild(repChips);
+      sheet.appendChild(fRep);
 
       var f3 = el('div', 'field');
       var l3 = el('span', 'field-label');
@@ -1295,7 +1497,8 @@
           est: draft.est,
           start: time.value || '',
           note: note.value.trim(),
-          skill: draft.skill
+          skill: draft.skill,
+          repeat: draft.repeat
         };
         Den.setSettings({ lastSkill: values.skill });
         if (task) {
@@ -1309,6 +1512,8 @@
                 d.tasks[i].start = values.start;
                 d.tasks[i].note = values.note;
                 d.tasks[i].skill = values.skill;
+                d.tasks[i].repeat = values.repeat;
+                d.tasks[i].updatedAt = Date.now();
                 found = true;
                 return;
               }
@@ -1325,8 +1530,11 @@
               start: values.start,
               note: values.note,
               skill: values.skill,
+              repeat: values.repeat,
+              series: Den.newId(),
               done: false,
-              createdAt: Date.now()
+              createdAt: Date.now(),
+              updatedAt: Date.now()
             });
           });
         }
@@ -1343,24 +1551,116 @@
   /* ───────────────────────── Действия над задачей ───────────────────────── */
   function toggleTask(id) {
     var before = findTask(id);
+    var becameDone = !!(before && !before.done);
+    var finishedTimer = 0;
+
     mutate(function (day) {
       for (var i = 0; i < day.tasks.length; i++) {
         if (day.tasks[i].id === id) {
           var t = day.tasks[i];
+          if (becameDone && t.timerStart) finishedTimer = stopTimer(t);
           t.done = !t.done;
           t.doneAt = t.done ? Date.now() : null;
-          if (before) {
-            announce('Задача «' + t.title + '» ' + (t.done ? 'выполнена' : 'снова активна'));
-          }
+          t.updatedAt = Date.now();
           return;
         }
       }
     });
+
+    var after = findTask(id);
+    if (after) {
+      announce('Задача «' + after.title + '» ' + (after.done ? 'выполнена' : 'снова активна'));
+      if (becameDone) scheduleRepeat(after, state.date);
+    }
+    if (finishedTimer) toast('Записано ' + fmtDur(finishedTimer));
+  }
+
+  function scheduleRepeat(task, date) {
+    if (!task || !task.repeat) return 0;
+    var next = nextRepeatDate(date, task.repeat);
+    if (!next) return 0;
+
+    var series = task.series || task.id;
+    var target = Den.getDay(next);
+    var exists = (target.tasks || []).some(function (t) {
+      return (t.series || t.id) === series && !t.done;
+    });
+    if (exists) return 0;
+
+    var copy = JSON.parse(JSON.stringify(task));
+    copy.id = Den.newId();
+    copy.series = series;
+    copy.done = false;
+    copy.doneAt = null;
+    copy.timerStart = null;
+    copy.spent = 0;
+    copy.createdAt = Date.now();
+    copy.updatedAt = Date.now();
+
+    target.tasks.push(copy);
+    Den.saveDay(target);
+    toast('Следующий раз: ' + shortDate(next));
+    return 1;
+  }
+
+  function startTaskTimer(id) {
+    var running = [];
+    Object.keys(Den.allDays()).forEach(function (date) {
+      if (!DATE_RE.test(date)) return;
+      var day = Den.allDays()[date];
+      var touched = false;
+      (day.tasks || []).forEach(function (t) {
+        if (t.timerStart && t.id !== id) {
+          stopTimer(t);
+          running.push(t);
+          touched = true;
+        }
+      });
+      if (touched) Den.saveMany([day]);
+    });
+
+    mutate(function (day) {
+      day.tasks.forEach(function (t) {
+        if (t.id === id) { t.timerStart = Date.now(); t.updatedAt = Date.now(); }
+      });
+    });
+
+    toast(running.length ? 'Предыдущий таймер остановлен' : 'Таймер запущен');
+  }
+
+  function stopTaskTimer(id) {
+    var mins = 0;
+    mutate(function (day) {
+      day.tasks.forEach(function (t) {
+        if (t.id === id) mins = stopTimer(t);
+      });
+    });
+    toast(mins ? 'Записано ' + fmtDur(mins) : 'Таймер не был запущен');
   }
 
   function removeTask(id) {
-    mutate(function (day) {
-      day.tasks = day.tasks.filter(function (t) { return t.id !== id; });
+    var date = state.date;
+    var day = Den.getDay(date);
+    var removed = null;
+
+    day.tasks = day.tasks.filter(function (t) {
+      if (t.id === id) { removed = t; return false; }
+      return true;
+    });
+    if (!removed) return;
+
+    if (!day.removed) day.removed = {};
+    day.removed[id] = Date.now();
+    Den.saveDay(day);
+
+    toast('Задача удалена', 'Отменить', function () {
+      var back = Den.getDay(date);
+      if (!Array.isArray(back.tasks)) back.tasks = [];
+      removed.updatedAt = Date.now();
+      back.tasks.push(removed);
+      if (back.removed) delete back.removed[removed.id];
+      Den.saveDay(back);
+      toast('Возвращено');
     });
   }
 
@@ -1372,6 +1672,9 @@
       return true;
     });
     if (!task) return;
+
+    if (!day.removed) day.removed = {};
+    day.removed[id] = Date.now();
     Den.saveDay(day);
 
     var target = shiftYmd(state.date, 1);
@@ -1380,6 +1683,7 @@
     task.start = '';
     task.done = false;
     task.doneAt = null;
+    task.updatedAt = Date.now();
     next.tasks.push(task);
     Den.saveDay(next);
     toast('Перенесено на ' + shortDate(target));
@@ -1396,7 +1700,22 @@
       sheet.appendChild(h);
 
       var list = el('div', 'menu-list');
-      list.appendChild(menuItem('i-clock', 'Изменить', function () {
+
+      if (!task.done) {
+        if (task.timerStart) {
+          list.appendChild(menuItem('i-clock', 'Остановить таймер', function () {
+            closeSheet();
+            setTimeout(function () { stopTaskTimer(id); }, 100);
+          }));
+        } else {
+          list.appendChild(menuItem('i-clock', 'Запустить таймер', function () {
+            closeSheet();
+            setTimeout(function () { startTaskTimer(id); }, 100);
+          }));
+        }
+      }
+
+      list.appendChild(menuItem('i-gear', 'Изменить', function () {
         closeSheet();
         setTimeout(function () { openEditor(id); }, 120);
       }));
@@ -1404,7 +1723,9 @@
       if (task.start) {
         list.appendChild(menuItem('i-close', 'Убрать из расписания', function () {
           mutate(function (day) {
-            day.tasks.forEach(function (t) { if (t.id === id) t.start = ''; });
+            day.tasks.forEach(function (t) {
+              if (t.id === id) { t.start = ''; t.updatedAt = Date.now(); }
+            });
           });
           closeSheet();
         }));
@@ -1417,7 +1738,7 @@
 
       var del = menuItem('i-trash', 'Удалить', function () {
         closeSheet();
-        setTimeout(function () { removeTask(id); toast('Удалено'); }, 100);
+        setTimeout(function () { removeTask(id); }, 100);
       });
       del.classList.add('danger');
       list.appendChild(del);
@@ -1487,6 +1808,32 @@
       f2.appendChild(time);
       sheet.appendChild(f2);
 
+      var fType = el('div', 'field');
+      var lType = el('span', 'field-label');
+      lType.textContent = 'Тип';
+      var typeSeg = el('div', 'seg');
+      typeSeg.setAttribute('role', 'group');
+      typeSeg.setAttribute('aria-label', 'Тип привычки');
+      var kind = habit ? (habit.kind || 'good') : 'good';
+      [['good', 'Полезная'], ['bad', 'Вредная']].forEach(function (pair) {
+        var btn = el('button');
+        btn.type = 'button';
+        btn.dataset.kind = pair[0];
+        btn.textContent = pair[1];
+        btn.setAttribute('aria-pressed', kind === pair[0] ? 'true' : 'false');
+        btn.onclick = function () {
+          kind = pair[0];
+          Array.prototype.forEach.call(typeSeg.children, function (b) {
+            b.setAttribute('aria-pressed', b.dataset.kind === kind ? 'true' : 'false');
+          });
+          fSk.hidden = kind === 'bad';
+        };
+        typeSeg.appendChild(btn);
+      });
+      fType.appendChild(lType);
+      fType.appendChild(typeSeg);
+      sheet.appendChild(fType);
+
       var fSk = el('div', 'field');
       var lSk = el('label');
       lSk.setAttribute('for', 'hSkill');
@@ -1500,6 +1847,7 @@
         skillSel.appendChild(opt);
       });
       skillSel.value = habit ? (habit.skill || 'other') : 'other';
+      if (kind === 'bad') fSk.hidden = true;
       fSk.appendChild(lSk);
       fSk.appendChild(skillSel);
       sheet.appendChild(fSk);
@@ -1539,6 +1887,7 @@
               x.name = value;
               x.time = time.value || '';
               x.skill = skillSel.value;
+              x.kind = kind;
             }
           });
         } else {
@@ -1547,6 +1896,7 @@
             name: value,
             time: time.value || '',
             skill: skillSel.value,
+            kind: kind,
             checks: {}
           });
         }
@@ -1564,6 +1914,35 @@
   }
 
   /* ───────────────────────── Навык: редактор ───────────────────────── */
+  /* Удаление навыка: его задачи и привычки переводим на «Разное»,
+     чтобы опыт не пропал из интерфейса. */
+  function reassignSkill(fromId, toId) {
+    var map = Den.allDays();
+    var touchedDays = [];
+
+    Object.keys(map).forEach(function (date) {
+      if (!DATE_RE.test(date)) return;
+      var day = map[date];
+      if (!Array.isArray(day.tasks)) return;
+      var touched = false;
+      day.tasks.forEach(function (t) {
+        if (t.skill === fromId) { t.skill = toId; touched = true; }
+      });
+      if (touched) touchedDays.push(day);
+    });
+
+    if (touchedDays.length) Den.saveMany(touchedDays);
+
+    var hdoc = habitsDoc();
+    var habitsTouched = false;
+    hdoc.items.forEach(function (h) {
+      if (h.skill === fromId) { h.skill = toId; habitsTouched = true; }
+    });
+    if (habitsTouched) Den.saveDoc(hdoc);
+
+    return touchedDays.length;
+  }
+
   function skillSheet(id) {
     var doc = skillsDoc();
     var skill = null;
@@ -1620,13 +1999,22 @@
         del.textContent = 'Удалить';
         del.style.color = 'var(--danger)';
         del.onclick = function () {
-          if (!confirm('Удалить навык «' + skill.name + '»? Задачи останутся, их опыт уйдёт в «Разное».')) return;
+          var ok = confirm(
+            'Удалить навык «' + skill.name + '»?\n\n' +
+            'Задачи и привычки останутся, но перейдут в «Разное» — ' +
+            'их опыт сохранится и продолжит считаться.'
+          );
+          if (!ok) return;
+
+          var moved = reassignSkill(skill.id, 'other');
+
           var fresh = skillsDoc();
           fresh.items = fresh.items.filter(function (x) { return x.id !== skill.id; });
           Den.saveDoc(fresh);
+
           closeSheet();
           render();
-          toast('Навык удалён');
+          toast(moved ? 'Навык удалён, дни перенесены в «Разное»' : 'Навык удалён');
         };
         actions.appendChild(del);
       }
@@ -1657,6 +2045,81 @@
       name.onkeydown = function (e) {
         if (e.key === 'Enter') { e.preventDefault(); save.click(); }
       };
+    });
+  }
+
+  /* ───────────────────────── Поиск ───────────────────────── */
+  function openSearch() {
+    openSheet(function (sheet) {
+      var h = el('h2');
+      h.textContent = 'Поиск';
+      sheet.appendChild(h);
+
+      var input = el('input', 'input');
+      input.type = 'search';
+      input.placeholder = 'Название задачи…';
+      input.setAttribute('autocomplete', 'off');
+      sheet.appendChild(input);
+
+      var list = el('div', 'search-list');
+      sheet.appendChild(list);
+
+      var hint = el('p', 'hint');
+      hint.textContent = 'Ищет по всем дням. Достаточно двух букв.';
+
+      function draw() {
+        list.textContent = '';
+        var q = input.value.trim().toLowerCase();
+        if (q.length < 2) { list.appendChild(hint); return; }
+
+        var found = [];
+        var days = Den.allDays();
+        Object.keys(days).forEach(function (date) {
+          if (!DATE_RE.test(date)) return;
+          (days[date].tasks || []).forEach(function (t) {
+            if (String(t.title).toLowerCase().indexOf(q) >= 0) {
+              found.push({ date: date, task: t });
+            }
+          });
+        });
+
+        if (!found.length) { list.appendChild(hint); return; }
+
+        found.sort(function (a, b) {
+          return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0);
+        });
+
+        found.slice(0, 40).forEach(function (row) {
+          var btn = el('button', 'search-row');
+          btn.type = 'button';
+
+          var date = el('span', 'search-date');
+          date.textContent = shortDate(row.date);
+
+          var title = el('span', 'search-title');
+          title.textContent = row.task.title;
+
+          btn.appendChild(date);
+          btn.appendChild(title);
+
+          if (row.task.done) {
+            var mark = el('span', 'search-mark');
+            mark.textContent = '✓';
+            btn.appendChild(mark);
+          }
+
+          btn.onclick = function () {
+            closeSheet();
+            setDate(row.date);
+            setView('day');
+          };
+          list.appendChild(btn);
+        });
+      }
+
+      input.oninput = draw;
+      draw();
+      setTimeout(function () { input.focus(); }, 80);
     });
   }
 
@@ -1806,6 +2269,8 @@
 
     updatePermissionHint();
     updateSyncUI();
+    renderAuth();
+    renderPush();
   }
 
   function updatePermissionHint() {
@@ -1868,6 +2333,112 @@
         if (err) msg.textContent = text + ': ' + err;
       }
     }
+  }
+
+  /* ───────────────────────── Аккаунт и push ───────────────────────── */
+  function renderAuth() {
+    var session = Den.getSession();
+    var signedIn = !!(session && session.access_token);
+    $('authSignedOut').hidden = signedIn;
+    $('authSignedIn').hidden = !signedIn;
+    if (signedIn) {
+      $('authEmailLabel').textContent = session.email || 'выполнен вход';
+    }
+  }
+
+  function renderPush() {
+    var enabled = !!Den.getSettings().push;
+    var supported = 'serviceWorker' in navigator && 'PushManager' in window;
+    var msg = $('pushMsg');
+    var dot = $('pushDot');
+    $('setPush').checked = enabled;
+
+    if (!supported) {
+      dot.dataset.state = 'off';
+      msg.textContent = 'Браузер не поддерживает push';
+      $('setPush').disabled = true;
+      return;
+    }
+
+    if (!enabled) {
+      dot.dataset.state = 'off';
+      msg.textContent = 'Не включено';
+      return;
+    }
+
+    dot.dataset.state = 'ok';
+    var granted = (typeof Notification !== 'undefined') && Notification.permission === 'granted';
+    msg.textContent = 'Включено · ' + (granted ? 'разрешено' : 'нет разрешения');
+  }
+
+  function urlBase64ToUint8Array(base64) {
+    var padding = '='.repeat((4 - (base64.length % 4)) % 4);
+    var normalized = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(normalized);
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return bytes;
+  }
+
+  function savePushSub(subscription) {
+    var json = subscription.toJSON();
+    return Den.savePushSub([{
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Moscow',
+      lead_min: Number(Den.getSettings().leadMin) || 5,
+      space: Den.getSettings().space || 'personal'
+    }]);
+  }
+
+  function enablePush() {
+    var vapid = Den.getSettings().vapidPublicKey;
+    if (!vapid) { toast('Нет VAPID-ключа в config.js'); return Promise.resolve(false); }
+    if (!Den.remoteReady()) { toast('Сначала подключи Supabase'); return Promise.resolve(false); }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      toast('Браузер не умеет push');
+      return Promise.resolve(false);
+    }
+
+    return Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') throw new Error('разрешение не выдано');
+      return navigator.serviceWorker.ready;
+    }).then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (existing) {
+        if (existing) return existing;
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapid)
+        });
+      });
+    }).then(function (subscription) {
+      return savePushSub(subscription);
+    }).then(function () {
+      Den.setSettings({ push: true });
+      renderPush();
+      toast('Push включён');
+      return true;
+    }).catch(function (err) {
+      Den.setSettings({ push: false });
+      renderPush();
+      toast('Не удалось: ' + (err && err.message ? err.message : 'ошибка'));
+      return false;
+    });
+  }
+
+  function disablePush() {
+    if (!('serviceWorker' in navigator)) return Promise.resolve();
+    return navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.getSubscription();
+    }).then(function (sub) {
+      if (!sub) return null;
+      return sub.unsubscribe();
+    }).catch(function () {}).then(function () {
+      Den.setSettings({ push: false });
+      renderPush();
+      toast('Push выключен');
+    });
   }
 
   /* ───────────────────────── Напоминания ───────────────────────── */
@@ -2143,6 +2714,7 @@
         day.tasks.push({
           id: Den.newId(), title: title, prio: 'med', est: DEFAULT_EST,
           start: '', note: '', done: false, createdAt: Date.now(),
+          updatedAt: Date.now(),
           skill: Den.getSettings().lastSkill || 'other'
         });
       });
@@ -2153,6 +2725,28 @@
 
     $('reviewBtn').onclick = openReview;
     $('reviewOpen').onclick = openReview;
+
+    $('authSend').onclick = function () {
+      var email = $('authEmail').value.trim();
+      if (!email || email.indexOf('@') < 0) { toast('Нужна почта'); return; }
+      toast('Отправляю ссылку…');
+      Den.signIn(email).then(function () {
+        toast('Письмо отправлено — открой ссылку в этом браузере');
+      }).catch(function (err) {
+        toast('Ошибка: ' + (err && err.message ? err.message : 'не вышло'));
+      });
+    };
+
+    $('authSignOut').onclick = function () {
+      Den.signOut();
+      renderAuth();
+      toast('Вы вышли');
+    };
+
+    $('setPush').onchange = function () {
+      if (this.checked) enablePush();
+      else disablePush();
+    };
 
     $('addHabit').onclick = function () { habitSheet(); };
     $('addSkill').onclick = function () { skillSheet(); };
@@ -2299,6 +2893,73 @@
       }
     };
 
+    document.addEventListener('keydown', function (e) {
+      var tag = (document.activeElement && document.activeElement.tagName) || '';
+      var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+      if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === 'k') {
+        e.preventDefault();
+        if ($('sheetBackdrop').hidden) openSearch();
+        return;
+      }
+
+      if (!$('sheetBackdrop').hidden) return;
+      if (typing) return;
+
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openEditor(); return; }
+      if (e.key === '/') { e.preventDefault(); openSearch(); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setDate(shiftYmd(state.date, -1)); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); setDate(shiftYmd(state.date, 1)); return; }
+      if (e.key === 't' || e.key === 'T') { setDate(todayStr()); return; }
+      if (e.key >= '1' && e.key <= '5') { setView(VIEWS[Number(e.key) - 1]); return; }
+    });
+
+    $('printView').onclick = function () { window.print(); };
+
+    /* перетаскивание блоков мышью */
+    $('blocks').addEventListener('pointerdown', function (event) {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return;
+      var block = event.target.closest ? event.target.closest('.block') : null;
+      if (!block) return;
+
+      var id = block.dataset.id;
+      var startY = event.clientY;
+      var origTop = parseFloat(block.style.top) || 0;
+      var moved = false;
+      var hour = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hour')) || 56;
+      var pxPerMin = hour / 60;
+
+      function onMove(ev) {
+        var dy = ev.clientY - startY;
+        if (!moved && Math.abs(dy) < 5) return;
+        moved = true;
+        block.style.top = Math.max(0, origTop + dy) + 'px';
+        block.style.cursor = 'grabbing';
+      }
+
+      function onUp() {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        block.style.cursor = '';
+        if (!moved) return;
+
+        state.dragged = true;
+        var newTop = parseFloat(block.style.top) || 0;
+        var mins = toMin(Den.getSettings().dayStart) + Math.round(newTop / pxPerMin / 15) * 15;
+        mins = Math.max(0, Math.min(23 * 60 + 45, mins));
+
+        mutate(function (day) {
+          day.tasks.forEach(function (t) {
+            if (t.id === id) { t.start = fromMin(mins); t.updatedAt = Date.now(); }
+          });
+        });
+        toast('Перенесено на ' + fromMin(mins));
+      }
+
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+
     window.addEventListener('scroll', function () {
       $('appbar').classList.toggle('is-scrolled', window.scrollY > 4);
     }, { passive: true });
@@ -2329,6 +2990,7 @@
   }
 
   function onTaskAreaClick(e) {
+    if (state.dragged) { state.dragged = false; return; }
     var node = e.target.closest ? e.target.closest('.task, .block') : null;
     if (!node) return;
     var id = node.dataset.id;
@@ -2343,17 +3005,28 @@
   function render() {
     var active = document.activeElement;
     var key = active && active.getAttribute ? active.getAttribute('data-fkey') : '';
-    renderDay();
-    if (state.view === 'habits') renderHabits();
-    if (state.view === 'week') renderWeek();
-    if (state.view === 'stats') renderStats();
-
+    try {
+      renderSafe();
+    } catch (err) {
+      console.error(err);
+      if (!render.failed) {
+        render.failed = true;
+        toast('Что-то пошло не так — обнови приложение');
+      }
+    }
     if (key) {
       var again = document.querySelector('[data-fkey="' + key + '"]');
       if (again && again !== document.activeElement) {
         try { again.focus({ preventScroll: true }); } catch (err) { again.focus(); }
       }
     }
+  }
+
+  function renderSafe() {
+    renderDay();
+    if (state.view === 'habits') renderHabits();
+    if (state.view === 'week') renderWeek();
+    if (state.view === 'stats') renderStats();
   }
 
   function tickClock() {
@@ -2405,6 +3078,19 @@
 
     registerSw();
     checkDecay();
+
+    if (Den.consumeAuthHash()) {
+      Den.fetchProfile()
+        .then(function () { return Den.claimLegacyRows(); })
+        .then(function (claimed) {
+          if (claimed) toast('Вход выполнен, перенесено дней: ' + claimed);
+          else toast('Вход выполнен');
+          renderAuth();
+          renderSettings();
+          return Den.syncNow();
+        })
+        .catch(function () {});
+    }
 
     if (Den.remoteReady()) Den.syncNow();
   }

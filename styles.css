@@ -1480,3 +1480,305 @@ html[data-theme="light"] .seg button[data-prio="low"][aria-pressed="true"] { col
 }
 
 .sk-penalty { color: var(--danger); font-weight: 600; }
+
+/* ───────────────────────── ПК: широкий макет ───────────────────────── */
+
+/* базово (мобильный): одна колонка, порядок как раньше */
+.day-cols { display: flex; flex-direction: column; gap: 14px; }
+.day-col { display: flex; flex-direction: column; gap: 14px; }
+.day-col.side { order: 1; }
+.day-col.main { order: 2; }
+.day-col > .card { margin-top: 0; }
+
+@media (min-width: 960px) {
+  :root {
+    --shell: 1180px;
+    --hour: 64px;
+  }
+
+  .appbar {
+    max-width: 1180px;
+    padding: 16px 32px 6px;
+  }
+
+  .brand-name { font-size: 16.5px; }
+  .brand-mark { width: 36px; height: 36px; border-radius: 11px; }
+
+  /* навигация наверх: полоса вкладок под шапкой вместо нижнего таббара */
+  .tabbar {
+    position: static;
+    transform: none;
+    left: auto;
+    bottom: auto;
+    width: auto;
+    height: auto;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 4px 32px 10px;
+    background: none;
+    border-top: 0;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .tab {
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+
+  .tab svg { width: 18px; height: 18px; }
+  .tab:hover { background: var(--surface-2); color: var(--ink); }
+
+  .tab[aria-selected="true"] {
+    background: var(--surface-2);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--line-2);
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 14px 32px 130px;
+  }
+
+  h1 { font-size: 36px; }
+  .lede { font-size: 15px; max-width: 60ch; }
+  .eyebrow { font-size: 11px; }
+
+  .card { padding: 18px 18px 16px; }
+
+  /* день: две колонки */
+  .day-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .day-col { gap: 16px; }
+  .day-col.side { grid-column: 2; grid-row: 1; order: 0; }
+  .day-col.main { grid-column: 1; grid-row: 1; order: 0; }
+
+  .review-cta { margin-top: 16px; }
+
+  /* неделя: все семь дней в строку */
+  #page-week .week-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+  #page-week .day-card { min-height: 168px; padding: 12px; }
+  #page-week .day-card .dow { font-size: 10.5px; }
+  #page-week .ring { width: 48px; height: 48px; }
+
+  /* итоги: четыре показателя в строку, навыки в 4 колонки */
+  #page-stats .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #page-stats .skill-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #page-stats .bars { height: 150px; }
+
+  /* привычки: не растягивать на всю ширину */
+  #page-habits .card { max-width: 900px; }
+  #page-habits .habit-days { gap: 8px; }
+  #page-habits .day-dot { height: 48px; }
+
+  /* настройки: две колонки карточек */
+  #page-settings {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 18px;
+    align-items: start;
+  }
+
+  #page-settings > .eyebrow,
+  #page-settings > h1,
+  #page-settings > .lede,
+  #page-settings > .small-note { grid-column: 1 / -1; }
+
+  #page-settings > .card { margin-top: 4px; }
+
+  /* поле быстрого добавления — компактная панель снизу */
+  .quickadd { width: min(100%, 640px); padding: 0; }
+
+  .sheet {
+    max-width: 560px;
+    border-radius: var(--r-xl);
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 0;
+    max-height: 86dvh;
+  }
+
+  .skill-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ПК: доводка */
+@media (min-width: 960px) {
+  /* правая колонка дня держится на экране при прокрутке расписания */
+  .day-col.side {
+    position: sticky;
+    top: 96px;
+    align-self: start;
+  }
+
+  /* сетка настроек: карточки не растягиваются под соседа */
+  #page-settings > .card { align-self: start; }
+
+  /* график не размазывается на всю ширину */
+  #page-stats .bars { max-width: 820px; }
+  #page-stats .bar { max-width: 34px; }
+
+  /* недельные карточки чуть просторнее */
+  #page-week .day-card { min-height: 186px; }
+  #page-week .day-card .dnum { font-size: 17px; }
+  #page-week .day-card .dadd { font-size: 13px; }
+}
+
+/* тост с действием */
+.toast.has-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 16px;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.toast-action {
+  flex: none;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.toast-action:hover { background: rgba(255, 255, 255, 0.24); }
+
+/* серия привычки */
+.habit-streak {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--med);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ───────────────────────── Поиск ───────────────────────── */
+.search-list { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  text-align: left;
+  color: var(--ink);
+  width: 100%;
+}
+
+.search-row:hover { background: var(--surface-2); }
+
+.search-date {
+  flex: none;
+  width: 84px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-mark { color: var(--low); font-weight: 700; }
+
+/* блоки можно таскать мышью */
+@media (min-width: 960px) {
+  .block { cursor: grab; }
+  .block:active { cursor: grabbing; }
+}
+
+/* ───────────────────────── Печать / PDF ───────────────────────── */
+@media print {
+  :root {
+    --bg: #ffffff;
+    --bg-2: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f7f7f9;
+    --surface-3: #efeff3;
+    --ink: #111111;
+    --ink-soft: #333333;
+    --ink-faint: #666666;
+    --line: #dddddd;
+    --line-2: #cccccc;
+    --accent: #5b21b6;
+    --accent-2: #5b21b6;
+  }
+
+  body { background: #fff !important; color: #111 !important; }
+
+  .appbar,
+  .tabbar,
+  .quickadd,
+  .toast,
+  .sheet-backdrop,
+  .review-cta button,
+  .sync-dot,
+  .link-btn,
+  .btn { display: none !important; }
+
+  .page { padding: 0 !important; max-width: none !important; }
+  .card { box-shadow: none !important; break-inside: avoid; }
+  .day-cols { display: block !important; }
+  .day-col { display: block !important; }
+  .day-col > .card { margin-top: 12px !important; }
+
+  a[href]::after { content: ""; }
+}
+
+/* вредные привычки */
+.habit-kind {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--danger);
+  background: rgba(240, 97, 111, 0.14);
+  border: 1px solid rgba(240, 97, 111, 0.32);
+}
+
+.day-dot.is-bad {
+  background: rgba(240, 97, 111, 0.9);
+  border-color: rgba(240, 97, 111, 0.9);
+  color: #fff;
+}
+
+.habit-bar.is-bad i { background: linear-gradient(90deg, #f0616f, #ff9a8b); }
+
+.habit-chip.is-bad[aria-pressed="true"] {
+  background: rgba(240, 97, 111, 0.16);
+  border-color: rgba(240, 97, 111, 0.42);
+  color: var(--ink);
+}
+
+.habit-chip.is-bad[aria-pressed="true"] .tick {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.habit-row.is-bad .habit-name { color: var(--ink); }
