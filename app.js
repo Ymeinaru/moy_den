@@ -1797,8 +1797,12 @@
       var url = $('setSbUrl').value.trim();
       var key = $('setSbKey').value.trim();
       var space = $('setSpace').value.trim() || 'personal';
-      if (!url || !key) { toast('Нужны URL и anon key'); return; }
+      if (!url || !key) { toast('Нужны URL и ключ'); return; }
       if (!/^https?:\/\//i.test(url)) { toast('URL должен начинаться с https://'); return; }
+      if (/^sb_secret_/i.test(key)) {
+        toast('Это секретный ключ — в браузер его нельзя. Нужен publishable');
+        return;
+      }
       Den.setSettings({ supabaseUrl: url, supabaseAnonKey: key, space: space });
       toast('Подключаюсь…');
       Den.syncNow().then(function (ok) {

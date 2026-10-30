@@ -208,10 +208,11 @@
   function remoteReady() { return !!remoteCfg(); }
 
   function authHeaders(cfg) {
-    return {
-      'apikey': cfg.key,
-      'Authorization': 'Bearer ' + cfg.key
-    };
+    var headers = { 'apikey': cfg.key };
+    // Новые ключи Supabase (sb_publishable_…) — короткие строки, не JWT:
+    // их передают только в apikey. Legacy-ключи (eyJ…) идут ещё и в Bearer.
+    if (/^eyJ/.test(cfg.key)) headers['Authorization'] = 'Bearer ' + cfg.key;
+    return headers;
   }
 
   function dirtyCount() {
