@@ -1,5 +1,5 @@
 /* Service worker: оболочка приложения — из кэша, Supabase — всегда из сети. */
-const CACHE = 'moy-den-v1';
+const CACHE = 'moy-den-v2';
 const ASSETS = [
   './',
   'index.html',
@@ -11,13 +11,14 @@ const ASSETS = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
+  'icons/icon-maskable-512.png',
   'icons/favicon.svg'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE)
-      .then((cache) => cache.addAll(ASSETS))
+      .then((cache) => cache.addAll(ASSETS.map((url) => new Request(url, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
@@ -47,9 +48,9 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => hit);
+        .catch(() => null);
 
-      return hit || network;
+      return hit || network.then((response) => response || new Response('', { status: 504 }));
     })
   );
 });

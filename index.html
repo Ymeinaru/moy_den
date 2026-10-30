@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#f7f5fc" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Мой день">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -51,8 +51,27 @@
     </div>
   </header>
 
+  <nav class="tabbar" role="tablist" aria-label="Разделы">
+    <button class="tab" role="tab" id="tab-day" aria-controls="page-day" aria-selected="true">
+      <svg aria-hidden="true"><use href="#i-day"></use></svg>День
+    </button>
+    <button class="tab" role="tab" id="tab-habits" aria-controls="page-habits" aria-selected="false" tabindex="-1">
+      <svg aria-hidden="true"><use href="#i-habits"></use></svg>Привычки
+    </button>
+    <button class="tab" role="tab" id="tab-week" aria-controls="page-week" aria-selected="false" tabindex="-1">
+      <svg aria-hidden="true"><use href="#i-week"></use></svg>Неделя
+    </button>
+    <button class="tab" role="tab" id="tab-stats" aria-controls="page-stats" aria-selected="false" tabindex="-1">
+      <svg aria-hidden="true"><use href="#i-chart"></use></svg>Итоги
+    </button>
+    <button class="tab" role="tab" id="tab-settings" aria-controls="page-settings" aria-selected="false" tabindex="-1">
+      <svg aria-hidden="true"><use href="#i-gear"></use></svg>Ещё
+    </button>
+  </nav>
+
+  <main id="views">
   <!-- ═════════ День ═════════ -->
-  <main id="page-day" class="page" role="tabpanel" aria-labelledby="tab-day" tabindex="-1">
+  <div id="page-day" class="page" role="tabpanel" aria-labelledby="tab-day" tabindex="-1">
     <p class="eyebrow">личный планер · план на день</p>
     <h1>День в вашем ритме</h1>
     <p class="lede">Задачи, время и привычки. В спокойной теме.</p>
@@ -105,17 +124,17 @@
         <div class="timeline" id="timeline"></div>
         <div class="blocks" id="blocks"></div>
       </div>
-      <p class="off-hours" id="offGrid" hidden></p>
+      <p class="off-hours" id="offGrid" role="status" aria-live="polite" hidden></p>
     </section>
 
     <div class="review-cta" id="reviewCta">
       <div class="txt" id="reviewText">—</div>
       <button class="btn tiny primary" id="reviewBtn" type="button">Итоги</button>
     </div>
-  </main>
+  </div>
 
   <!-- ═════════ Привычки ═════════ -->
-  <main id="page-habits" class="page" role="tabpanel" aria-labelledby="tab-habits" tabindex="-1" hidden>
+  <div id="page-habits" class="page" role="tabpanel" aria-labelledby="tab-habits" tabindex="-1" hidden>
     <p class="eyebrow">личный планер · привычки</p>
     <h1>Трекер привычек</h1>
     <p class="lede">Семь маленьких шагов в постоянство.</p>
@@ -142,10 +161,10 @@
     </section>
 
     <p class="small-note" id="habitNote"></p>
-  </main>
+  </div>
 
   <!-- ═════════ Неделя ═════════ -->
-  <main id="page-week" class="page" role="tabpanel" aria-labelledby="tab-week" tabindex="-1" hidden>
+  <div id="page-week" class="page" role="tabpanel" aria-labelledby="tab-week" tabindex="-1" hidden>
     <p class="eyebrow">личный планер · неделя</p>
     <h1>Неделя в вашем ритме</h1>
     <p class="lede">Планы, привычки и время. Прогресс — по кольцам.</p>
@@ -163,10 +182,10 @@
 
     <div class="week-grid" id="weekGrid"></div>
     <p class="small-note" id="weekNote"></p>
-  </main>
+  </div>
 
   <!-- ═════════ Итоги ═════════ -->
-  <main id="page-stats" class="page" role="tabpanel" aria-labelledby="tab-stats" tabindex="-1" hidden>
+  <div id="page-stats" class="page" role="tabpanel" aria-labelledby="tab-stats" tabindex="-1" hidden>
     <p class="eyebrow">личный планер · итоги</p>
     <h1>Итоги и серии</h1>
     <p class="lede">Что сделано, сколько подряд и как давно.</p>
@@ -180,7 +199,7 @@
 
     <section class="card">
       <div class="card-head"><h2>Последние 14 дней</h2><span class="count" id="barsCount"></span></div>
-      <div class="bars" id="bars" role="img" aria-label="Сколько задач сделано по дням"></div>
+      <div class="bars" id="bars" role="list" aria-label="Сделано задач по дням за 14 дней"></div>
     </section>
 
     <section class="card" aria-labelledby="hReview">
@@ -196,10 +215,10 @@
       <div class="stat"><div class="num" id="statAllTime">0<small>ч</small></div><div class="cap">по оценкам</div></div>
     </div>
     <p class="small-note" id="statsNote"></p>
-  </main>
+  </div>
 
   <!-- ═════════ Настройки ═════════ -->
-  <main id="page-settings" class="page" role="tabpanel" aria-labelledby="tab-settings" tabindex="-1" hidden>
+  <div id="page-settings" class="page" role="tabpanel" aria-labelledby="tab-settings" tabindex="-1" hidden>
     <p class="eyebrow">личный планер · настройки</p>
     <h1>Настройки</h1>
     <p class="lede">Время дня, уведомления и синхронизация.</p>
@@ -222,13 +241,13 @@
 
     <section class="card">
       <div class="card-head"><h2>Напоминания</h2></div>
-      <div class="setting">
-        <span class="label" id="lblNotify">Уведомления<span class="sub" id="notifyPermHint">по времени начала задачи</span></span>
-        <label class="switch">
-          <input type="checkbox" id="setNotify" aria-labelledby="lblNotify">
+      <label class="setting" for="setNotify">
+        <span class="label">Уведомления<span class="sub" id="notifyPermHint">по времени начала задачи</span></span>
+        <span class="switch">
+          <input type="checkbox" id="setNotify">
           <span class="track" aria-hidden="true"></span>
-        </label>
-      </div>
+        </span>
+      </label>
       <div class="setting">
         <span class="label" id="lblLead">За сколько минут</span>
         <select class="select" id="setLead" aria-labelledby="lblLead"></select>
@@ -273,7 +292,7 @@
       </div>
       <div class="sync-status">
         <span class="sync-dot" id="syncDot2" data-state="off" aria-hidden="true"></span>
-        <span id="syncMsg">Локальный режим</span>
+        <span id="syncMsg" role="status" aria-live="polite">Локальный режим</span>
       </div>
     </section>
 
@@ -281,23 +300,25 @@
       <div class="card-head"><h2>Данные</h2></div>
       <div class="setting">
         <span class="label">Экспорт<span class="sub">JSON со всеми днями</span></span>
-        <button class="btn tiny ghost" id="exportJson" type="button">Скачать</button>
+        <button class="btn tiny ghost" id="exportJson" type="button" aria-label="Скачать JSON со всеми днями">Скачать</button>
       </div>
       <div class="setting">
         <span class="label">Импорт<span class="sub">добавит дни из файла</span></span>
-        <button class="btn tiny ghost" id="importJson" type="button">Выбрать</button>
+        <button class="btn tiny ghost" id="importJson" type="button" aria-label="Выбрать JSON-файл для импорта">Выбрать</button>
       </div>
       <div class="setting">
         <span class="label">Календарь<span class="sub">.ics на завтра, с будильником</span></span>
-        <button class="btn tiny ghost" id="exportIcs" type="button">Скачать</button>
+        <button class="btn tiny ghost" id="exportIcs" type="button" aria-label="Скачать .ics на завтра">Скачать</button>
       </div>
       <div class="setting">
         <span class="label u-danger">Удалить все дни</span>
-        <button class="btn tiny ghost" id="resetAll" type="button">Сбросить</button>
+        <button class="btn tiny ghost" id="resetAll" type="button" aria-label="Удалить все дни">Сбросить</button>
       </div>
     </section>
 
     <p class="small-note">«Мой день» 1.0 — офлайн-приложение, данные в браузере и в Supabase.</p>
+  </div>
+
   </main>
 
   <div class="quickadd">
@@ -311,27 +332,12 @@
     </form>
   </div>
 
-  <nav class="tabbar" role="tablist" aria-label="Разделы">
-    <button class="tab" role="tab" id="tab-day" aria-controls="page-day" aria-selected="true">
-      <svg aria-hidden="true"><use href="#i-day"></use></svg>День
-    </button>
-    <button class="tab" role="tab" id="tab-habits" aria-controls="page-habits" aria-selected="false" tabindex="-1">
-      <svg aria-hidden="true"><use href="#i-habits"></use></svg>Привычки
-    </button>
-    <button class="tab" role="tab" id="tab-week" aria-controls="page-week" aria-selected="false" tabindex="-1">
-      <svg aria-hidden="true"><use href="#i-week"></use></svg>Неделя
-    </button>
-    <button class="tab" role="tab" id="tab-stats" aria-controls="page-stats" aria-selected="false" tabindex="-1">
-      <svg aria-hidden="true"><use href="#i-chart"></use></svg>Итоги
-    </button>
-    <button class="tab" role="tab" id="tab-settings" aria-controls="page-settings" aria-selected="false" tabindex="-1">
-      <svg aria-hidden="true"><use href="#i-gear"></use></svg>Ещё
-    </button>
-  </nav>
+
 </div>
 
 <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<p class="sr-only" id="srStatus" role="status" aria-live="polite"></p>
 <input type="file" id="fileImport" accept="application/json,.json" hidden>
 
 <script src="config.js"></script>

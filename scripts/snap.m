@@ -105,6 +105,11 @@ int main(int argc, const char *argv[]) {
         printf("first:   %s\n", [evalSync(web, @"(document.querySelector('.task-title')||{}).textContent || 'none'") UTF8String]);
         printf("blocks:  %s\n", [evalSync(web, @"String(document.querySelectorAll('.block').length)") UTF8String]);
         printf("cloud:   %s\n", [evalSync(web, @"document.body.innerText.indexOf('Встреча из облака') >= 0 ? 'found' : 'missing'") UTF8String]);
+        const char *expr = getenv("SNAP_EXPR");
+        if (expr) {
+            NSString *code = [NSString stringWithUTF8String:expr];
+            printf("expr:    %s\n", [evalSync(web, code) UTF8String]);
+        }
 
         double snapH = H;
         if (full) {
