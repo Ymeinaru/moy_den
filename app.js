@@ -12,7 +12,21 @@
   var ESTIMATES = [15, 30, 45, 60, 90, 120];
   var DEFAULT_EST = 30;
   var HABITS_KEY = 'habits';
+  var SKILLS_KEY = 'skills';
   var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  var HABIT_XP = 0.25;
+  var LEVEL_BASE = 50;
+  var LEVEL_STEP = 25;
+
+  var SKILL_DEFAULTS = [
+    { id: 'cook', name: 'Готовка', emoji: '🍳' },
+    { id: 'sport', name: 'Спорт', emoji: '🏋️' },
+    { id: 'work', name: 'Работа', emoji: '💼' },
+    { id: 'study', name: 'Учёба', emoji: '📚' },
+    { id: 'home', name: 'Дом', emoji: '🏠' },
+    { id: 'rest', name: 'Отдых', emoji: '🌿' },
+    { id: 'other', name: 'Разное', emoji: '🧩' }
+  ];
 
   var state = {
     date: null,
@@ -210,6 +224,122 @@
       if (t.done) { done++; minutes += estOf(t); }
     });
     return { total: tasks.length, done: done, minutes: minutes };
+  }
+
+  function skillsDoc() {
+    var doc = Den.getDoc(SKILLS_KEY, { items: [] });
+    if (!Array.isArray(doc.items) || !doc.items.length) {
+      doc.items = SKILL_DEFAULTS.map(function (s) {
+        return { id: s.id, name: s.name, emoji: s.emoji };
+      });
+    }
+    doc.items.forEach(function (s) {
+      if (!s.id) s.id = Den.newId();
+      if (!s.emoji) s.emoji = '🎯';
+      if (!s.name) s.name = 'Навык';
+    });
+    return doc;
+  }
+
+  function skillById(id) {
+    var list = skillsDoc().items;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    for (var j = 0; j < list.length; j++) if (list[j].id === 'other') return list[j];
+    return { id: 'other', name: 'Разное', emoji: '🧩' };
+  }
+
+  function fmtXp(value) {
+    var rounded = Math.round((value || 0) * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.001) return String(Math.round(rounded));
+    return String(rounded).replace('.', ',');
+  }
+
+  function levelInfo(xp) {
+    var level = 1;
+    var acc = 0;
+    var need = LEVEL_BASE;
+    var guard = 0;
+    while (xp >= acc + need && guard < 500) {
+      acc += need;
+      level += 1;
+      need = LEVEL_BASE + LEVEL_STEP * (level - 1);
+      guard += 1;
+    }
+    return { level: level, into: xp - acc, need: need, acc: acc };
+  }
+
+  function decayFor(earned, lastDate) {
+    if (!earned) return { idle: 0, days: 0, penalty: 0, effective: 0 };
+    var idle = lastDate
+      ? Math.round((parseYmd(todayStr()) - parseYmd(lastDate)) / 86400000)
+      : 0;
+    // Дизмораль не отключается: два дня простоя — норма, с третьего идёт минус.
+    var days = Math.max(0, idle - 2);
+    var penalty = days > 0 ? Math.min(earned * 0.15 * days, earned * 0.6) : 0;
+    return { idle: idle, days: days, penalty: penalty, effective: earned - penalty };
+  }
+
+  function xpSummary() {
+    var map = Den.allDays();
+    var habits = habitsDoc().items;
+    var today = todayStr();
+
+    var earned = {};
+    var last = {};
+    var todayXp = 0;
+
+    function add(sid, gain, date) {
+      earned[sid] = (earned[sid] || 0) + gain;
+      if (!last[sid] || date > last[sid]) last[sid] = date;
+    }
+
+    Object.keys(map).forEach(function (date) {
+      if (!DATE_RE.test(date)) return;
+
+      (map[date].tasks || []).forEach(function (t) {
+        if (!t.done) return;
+        var gain = estOf(t) / 60;
+        add(t.skill || 'other', gain, date);
+        if (date === today) todayXp += gain;
+      });
+
+      habits.forEach(function (h) {
+        if (!(h.checks && h.checks[date])) return;
+        add(h.skill || 'other', HABIT_XP, date);
+        if (date === today) todayXp += HABIT_XP;
+      });
+    });
+
+    var bySkill = {};
+    var total = 0;
+    var penaltyTotal = 0;
+    var idlePenalties = [];
+
+    Object.keys(earned).forEach(function (sid) {
+      var d = decayFor(earned[sid], last[sid]);
+      bySkill[sid] = {
+        earned: earned[sid],
+        effective: d.effective,
+        penalty: d.penalty,
+        idle: d.idle,
+        days: d.days
+      };
+      total += d.effective;
+      penaltyTotal += d.penalty;
+      if (d.penalty > 0) {
+        idlePenalties.push({ id: sid, penalty: d.penalty, idle: d.idle });
+      }
+    });
+
+    idlePenalties.sort(function (a, b) { return b.penalty - a.penalty; });
+
+    return {
+      total: total,
+      today: todayXp,
+      bySkill: bySkill,
+      idlePenalties: idlePenalties,
+      penalty: penaltyTotal
+    };
   }
 
   function habitsStat(date) {
@@ -491,7 +621,133 @@
     }
 
     renderReviewCta(day);
+    renderXpCard();
     updateSyncUI();
+  }
+
+  function renderXpCard() {
+    var xp = xpSummary();
+    var info = levelInfo(xp.total);
+    var pct = info.need ? Math.round(info.into / info.need * 100) : 0;
+
+    $('levelBadge').textContent = String(info.level);
+    $('levelTitle').textContent = 'Уровень ' + info.level;
+    $('levelNums').textContent = fmtXp(info.into) + ' из ' + info.need + ' XP';
+    $('levelBar').style.width = pct + '%';
+    $('levelBarWrap').setAttribute('aria-valuenow', String(pct));
+    $('levelBarWrap').setAttribute('aria-valuetext',
+      'до ' + (info.level + 1) + ' уровня ' + fmtXp(info.need - info.into) + ' XP');
+    $('xpToday').textContent = xp.today ? '+' + fmtXp(xp.today) + ' XP сегодня' : '';
+
+    var box = $('skillChips');
+    box.textContent = '';
+
+    var rows = skillsDoc().items.map(function (sk) {
+      var v = xp.bySkill[sk.id] || { effective: 0, penalty: 0 };
+      return { skill: sk, xp: v.effective, penalty: v.penalty };
+    }).filter(function (r) { return r.xp > 0 || r.penalty > 0; })
+      .sort(function (a, b) { return b.xp - a.xp; });
+
+    if (!rows.length) {
+      var hint = el('span', 'skill-chip');
+      hint.textContent = 'Выполни задачу — опыт придёт сюда';
+      box.appendChild(hint);
+    } else {
+      rows.forEach(function (row) {
+        var chip = el('span', 'skill-chip');
+        var em = el('span', 'em');
+        em.textContent = row.skill.emoji;
+        var name = el('span');
+        name.textContent = row.skill.name;
+        var val = el('b');
+        val.textContent = fmtXp(row.xp);
+        chip.appendChild(em);
+        chip.appendChild(name);
+        chip.appendChild(val);
+        box.appendChild(chip);
+      });
+    }
+
+    var note = $('decayNote');
+    if (xp.idlePenalties.length) {
+      note.hidden = false;
+      note.textContent = 'Опыт понижен: ' + xp.idlePenalties.map(function (r) {
+        var sk = skillById(r.id);
+        return sk.name + ' −' + fmtXp(r.penalty) + ' XP (' + r.idle + ' ' +
+          plural(r.idle, 'день', 'дня', 'дней') + ' без занятий)';
+      }).join(' · ');
+    } else {
+      note.hidden = true;
+      note.textContent = '';
+    }
+  }
+
+  function renderSkillStats() {
+    var xp = xpSummary();
+    var info = levelInfo(xp.total);
+    var pct = info.need ? Math.round(info.into / info.need * 100) : 0;
+
+    $('levelBadgeBig').textContent = String(info.level);
+    $('levelTitleBig').textContent = 'Уровень ' + info.level;
+    $('levelNumsBig').textContent = fmtXp(info.into) + ' из ' + info.need + ' XP';
+    $('levelBarBig').style.width = pct + '%';
+    $('levelTotalXp').textContent = 'всего ' + fmtXp(xp.total) + ' XP' +
+      (xp.penalty > 0 ? ' · −' + fmtXp(xp.penalty) + ' за простой' : '');
+
+    var items = skillsDoc().items.map(function (sk) {
+      var v = xp.bySkill[sk.id] || { effective: 0, penalty: 0, idle: 0 };
+      return { skill: sk, xp: v.effective, penalty: v.penalty, idle: v.idle };
+    }).sort(function (a, b) { return b.xp - a.xp; });
+
+    $('skillCount').textContent = items.length + ' ' + plural(items.length, 'навык', 'навыка', 'навыков');
+
+    var grid = $('skillGrid');
+    grid.textContent = '';
+    $('skillEmpty').hidden = items.length > 0;
+
+    items.forEach(function (row) {
+      var s = row.skill;
+      var lvl = levelInfo(row.xp);
+      var p = lvl.need ? Math.round(lvl.into / lvl.need * 100) : 0;
+
+      var card = el('button', 'skill-card');
+      card.type = 'button';
+      card.dataset.fkey = 'skill:' + s.id;
+      card.setAttribute('aria-label', s.name + ': уровень ' + lvl.level + ', ' + fmtXp(row.xp) +
+        ' опыта' + (row.penalty > 0 ? ', понижено на ' + fmtXp(row.penalty) : '') + '. Изменить');
+
+      var top = el('div', 'sk-top');
+      var em = el('span', 'em');
+      em.textContent = s.emoji;
+      var name = el('span');
+      name.textContent = s.name;
+      var lvlTag = el('span', 'sk-lvl');
+      lvlTag.textContent = 'Ур. ' + lvl.level;
+      top.appendChild(em);
+      top.appendChild(name);
+      top.appendChild(lvlTag);
+
+      var bar = el('div', 'level-bar');
+      var fill = el('i');
+      fill.style.width = p + '%';
+      bar.appendChild(fill);
+
+      var xpTxt = el('div', 'sk-xp');
+      xpTxt.textContent = fmtXp(row.xp) + ' XP';
+      if (row.penalty > 0) {
+        var pen = el('span', 'sk-penalty');
+        pen.textContent = ' · −' + fmtXp(row.penalty);
+        xpTxt.appendChild(pen);
+      } else if (!row.xp) {
+        xpTxt.textContent = '0 XP — пока пусто';
+      }
+
+      card.appendChild(top);
+      card.appendChild(bar);
+      card.appendChild(xpTxt);
+      card.onclick = function () { skillSheet(s.id); };
+      grid.appendChild(card);
+    });
   }
 
   function renderHabitChips() {
@@ -809,6 +1065,7 @@
     if (hs.total) line += ', привычки ' + hs.done + ' из ' + hs.total;
     if (day.review && day.review.note) line += '. Заметка: «' + day.review.note + '»';
     $('reviewSummary').textContent = line + '.';
+    renderSkillStats();
   }
 
   /* ───────────────────────── Шторки ───────────────────────── */
@@ -892,7 +1149,8 @@
     var task = id ? findTask(id) : null;
     var draft = {
       prio: task ? (task.prio || 'med') : ((preset && preset.prio) || 'med'),
-      est: task ? estOf(task) : DEFAULT_EST
+      est: task ? estOf(task) : DEFAULT_EST,
+      skill: task ? (task.skill || 'other') : (Den.getSettings().lastSkill || 'other')
     };
 
     openSheet(function (sheet) {
@@ -938,6 +1196,28 @@
       f2.appendChild(l2);
       f2.appendChild(seg);
       sheet.appendChild(f2);
+
+      var fSkill = el('div', 'field');
+      var lSkill = el('span', 'field-label');
+      lSkill.textContent = 'Навык — куда пойдёт опыт';
+      var skillChips = el('div', 'chips');
+      skillsDoc().items.forEach(function (sk) {
+        var chip = el('button', 'chip');
+        chip.type = 'button';
+        chip.dataset.skill = sk.id;
+        chip.textContent = sk.emoji + ' ' + sk.name;
+        chip.setAttribute('aria-pressed', draft.skill === sk.id ? 'true' : 'false');
+        chip.onclick = function () {
+          draft.skill = sk.id;
+          Array.prototype.forEach.call(skillChips.children, function (c) {
+            c.setAttribute('aria-pressed', c.dataset.skill === draft.skill ? 'true' : 'false');
+          });
+        };
+        skillChips.appendChild(chip);
+      });
+      fSkill.appendChild(lSkill);
+      fSkill.appendChild(skillChips);
+      sheet.appendChild(fSkill);
 
       var f3 = el('div', 'field');
       var l3 = el('span', 'field-label');
@@ -1014,8 +1294,10 @@
           prio: draft.prio,
           est: draft.est,
           start: time.value || '',
-          note: note.value.trim()
+          note: note.value.trim(),
+          skill: draft.skill
         };
+        Den.setSettings({ lastSkill: values.skill });
         if (task) {
           var found = false;
           mutate(function (d) {
@@ -1026,6 +1308,7 @@
                 d.tasks[i].est = values.est;
                 d.tasks[i].start = values.start;
                 d.tasks[i].note = values.note;
+                d.tasks[i].skill = values.skill;
                 found = true;
                 return;
               }
@@ -1041,6 +1324,7 @@
               est: values.est,
               start: values.start,
               note: values.note,
+              skill: values.skill,
               done: false,
               createdAt: Date.now()
             });
@@ -1203,6 +1487,23 @@
       f2.appendChild(time);
       sheet.appendChild(f2);
 
+      var fSk = el('div', 'field');
+      var lSk = el('label');
+      lSk.setAttribute('for', 'hSkill');
+      lSk.textContent = 'Навык — куда пойдёт опыт';
+      var skillSel = el('select', 'select');
+      skillSel.id = 'hSkill';
+      skillsDoc().items.forEach(function (sk) {
+        var opt = document.createElement('option');
+        opt.value = sk.id;
+        opt.textContent = sk.emoji + ' ' + sk.name;
+        skillSel.appendChild(opt);
+      });
+      skillSel.value = habit ? (habit.skill || 'other') : 'other';
+      fSk.appendChild(lSk);
+      fSk.appendChild(skillSel);
+      sheet.appendChild(fSk);
+
       var actions = el('div', 'sheet-actions');
       var cancel = el('button', 'btn ghost');
       cancel.type = 'button';
@@ -1234,14 +1535,121 @@
         var fresh = habitsDoc();
         if (habit) {
           fresh.items.forEach(function (x) {
-            if (x.id === habit.id) { x.name = value; x.time = time.value || ''; }
+            if (x.id === habit.id) {
+              x.name = value;
+              x.time = time.value || '';
+              x.skill = skillSel.value;
+            }
           });
         } else {
-          fresh.items.push({ id: Den.newId(), name: value, time: time.value || '', checks: {} });
+          fresh.items.push({
+            id: Den.newId(),
+            name: value,
+            time: time.value || '',
+            skill: skillSel.value,
+            checks: {}
+          });
         }
         Den.saveDoc(fresh);
         closeSheet();
         toast(habit ? 'Сохранено' : 'Привычка добавлена');
+      };
+      actions.appendChild(save);
+      sheet.appendChild(actions);
+
+      name.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); save.click(); }
+      };
+    });
+  }
+
+  /* ───────────────────────── Навык: редактор ───────────────────────── */
+  function skillSheet(id) {
+    var doc = skillsDoc();
+    var skill = null;
+    doc.items.forEach(function (s) { if (s.id === id) skill = s; });
+
+    openSheet(function (sheet) {
+      var h = el('h2');
+      h.textContent = skill ? 'Навык' : 'Новый навык';
+      sheet.appendChild(h);
+
+      var hint = el('p', 'hint');
+      hint.textContent = 'Опыт за задачу идёт в её навык и в общий уровень.';
+      sheet.appendChild(hint);
+
+      var f1 = el('div', 'field');
+      var l1 = el('label');
+      l1.setAttribute('for', 'skName');
+      l1.textContent = 'Название';
+      var name = el('input', 'input');
+      name.id = 'skName';
+      name.type = 'text';
+      name.maxLength = 40;
+      name.value = skill ? skill.name : '';
+      name.placeholder = 'Например: Музыка';
+      name.autocomplete = 'off';
+      f1.appendChild(l1);
+      f1.appendChild(name);
+      sheet.appendChild(f1);
+
+      var f2 = el('div', 'field');
+      var l2 = el('label');
+      l2.setAttribute('for', 'skEmoji');
+      l2.textContent = 'Значок (один символ, необязательно)';
+      var emoji = el('input', 'input');
+      emoji.id = 'skEmoji';
+      emoji.type = 'text';
+      emoji.maxLength = 2;
+      emoji.value = skill ? skill.emoji : '';
+      emoji.placeholder = '🎯';
+      f2.appendChild(l2);
+      f2.appendChild(emoji);
+      sheet.appendChild(f2);
+
+      var actions = el('div', 'sheet-actions');
+      var cancel = el('button', 'btn ghost');
+      cancel.type = 'button';
+      cancel.textContent = 'Отмена';
+      cancel.onclick = closeSheet;
+      actions.appendChild(cancel);
+
+      if (skill && skill.id !== 'other') {
+        var del = el('button', 'btn ghost');
+        del.type = 'button';
+        del.textContent = 'Удалить';
+        del.style.color = 'var(--danger)';
+        del.onclick = function () {
+          if (!confirm('Удалить навык «' + skill.name + '»? Задачи останутся, их опыт уйдёт в «Разное».')) return;
+          var fresh = skillsDoc();
+          fresh.items = fresh.items.filter(function (x) { return x.id !== skill.id; });
+          Den.saveDoc(fresh);
+          closeSheet();
+          render();
+          toast('Навык удалён');
+        };
+        actions.appendChild(del);
+      }
+
+      var save = el('button', 'btn primary');
+      save.type = 'button';
+      save.textContent = skill ? 'Сохранить' : 'Добавить';
+      save.onclick = function () {
+        var value = name.value.trim();
+        if (!value) { name.focus(); toast('Нужно название'); return; }
+        var fresh = skillsDoc();
+        var icon = emoji.value.trim() || '🎯';
+        if (skill) {
+          fresh.items.forEach(function (x) {
+            if (x.id === skill.id) { x.name = value; x.emoji = icon; }
+          });
+        } else {
+          fresh.items.push({ id: Den.newId(), name: value, emoji: icon });
+        }
+        Den.saveDoc(fresh);
+        closeSheet();
+        render();
+        toast(skill ? 'Сохранено' : 'Навык добавлен');
       };
       actions.appendChild(save);
       sheet.appendChild(actions);
@@ -1472,6 +1880,20 @@
     } catch (e) { return []; }
   }
 
+  function notifySimple(title, body, tag) {
+    var opts = { body: body, tag: tag || 'den' };
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then(function (reg) {
+        if (reg && reg.showNotification) reg.showNotification(title, opts);
+        else new Notification(title, opts);
+      }).catch(function () {
+        try { new Notification(title, opts); } catch (e) {}
+      });
+      return;
+    }
+    try { new Notification(title, opts); } catch (e) {}
+  }
+
   function notifyTask(task) {
     var title = 'Скоро: ' + task.title;
     var opts = { body: 'Начало в ' + task.start, tag: 'den-' + task.id };
@@ -1518,6 +1940,49 @@
     });
 
     if (changed) writeNotified(today, notified);
+  }
+
+  function decayKey() { return 'den.decay.notified'; }
+
+  function readDecaySeen() {
+    try {
+      var data = JSON.parse(localStorage.getItem(decayKey()) || '{}');
+      return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    } catch (e) { return {}; }
+  }
+
+  function writeDecaySeen(data) {
+    try { localStorage.setItem(decayKey(), JSON.stringify(data)); } catch (e) {}
+  }
+
+  function checkDecay() {
+    var xp = xpSummary();
+    if (!xp.idlePenalties.length) return;
+
+    var today = todayStr();
+    var seen = readDecaySeen();
+    var changed = false;
+    var fresh = [];
+
+    xp.idlePenalties.forEach(function (row) {
+      if (seen[row.id] === today) return;
+      seen[row.id] = today;
+      changed = true;
+      fresh.push(row);
+    });
+
+    if (changed) writeDecaySeen(seen);
+
+    fresh.forEach(function (row) {
+      var sk = skillById(row.id);
+      var days = row.idle + ' ' + plural(row.idle, 'день', 'дня', 'дней');
+      var text = sk.name + ': −' + fmtXp(row.penalty) + ' XP за ' + days + ' без занятий';
+
+      if (Den.getSettings().notify && 'Notification' in window && Notification.permission === 'granted') {
+        notifySimple('Опыт понижен', text, 'den-decay-' + row.id);
+      }
+      toast('Опыт понижен: ' + sk.name + ' −' + fmtXp(row.penalty));
+    });
   }
 
   function askPermission() {
@@ -1677,7 +2142,8 @@
       mutate(function (day) {
         day.tasks.push({
           id: Den.newId(), title: title, prio: 'med', est: DEFAULT_EST,
-          start: '', note: '', done: false, createdAt: Date.now()
+          start: '', note: '', done: false, createdAt: Date.now(),
+          skill: Den.getSettings().lastSkill || 'other'
         });
       });
       input.value = '';
@@ -1689,6 +2155,7 @@
     $('reviewOpen').onclick = openReview;
 
     $('addHabit').onclick = function () { habitSheet(); };
+    $('addSkill').onclick = function () { skillSheet(); };
 
     $('habitPrev').onclick = function () {
       state.habitWeek = shiftYmd(state.habitWeek, -7);
@@ -1839,6 +2306,7 @@
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') {
         tickReminders();
+        checkDecay();
         if (Den.remoteReady()) Den.syncNow();
         render();
       }
@@ -1936,6 +2404,7 @@
     });
 
     registerSw();
+    checkDecay();
 
     if (Den.remoteReady()) Den.syncNow();
   }

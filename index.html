@@ -100,6 +100,29 @@
       <div class="habit-chips" id="habitChips"></div>
     </section>
 
+    <section class="card" aria-labelledby="hXp">
+      <div class="card-head">
+        <h2 id="hXp">Опыт</h2>
+        <span class="count" id="xpToday"></span>
+        <span class="spacer"></span>
+        <button class="link-btn" type="button" data-goto="stats">Все навыки</button>
+      </div>
+      <div class="level-row">
+        <span class="level-badge" id="levelBadge" aria-hidden="true">1</span>
+        <div class="level-main">
+          <div class="level-top">
+            <span id="levelTitle">Уровень 1</span>
+            <span class="muted" id="levelNums">0 из 50 XP</span>
+          </div>
+          <div class="level-bar" id="levelBarWrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Прогресс уровня">
+            <i id="levelBar"></i>
+          </div>
+        </div>
+      </div>
+      <div class="skill-chips" id="skillChips"></div>
+      <p class="decay-note" id="decayNote" role="status" aria-live="polite" hidden></p>
+    </section>
+
     <section class="card" aria-labelledby="hTasks">
       <div class="card-head">
         <h2 id="hTasks">Без времени</h2>
@@ -190,6 +213,25 @@
     <h1>Итоги и серии</h1>
     <p class="lede">Что сделано, сколько подряд и как давно.</p>
 
+    <section class="card card-glow" aria-labelledby="hLevel">
+      <div class="card-head">
+        <h2 id="hLevel">Общий уровень</h2>
+        <span class="count" id="levelTotalXp"></span>
+      </div>
+      <div class="level-row">
+        <span class="level-badge big" id="levelBadgeBig" aria-hidden="true">1</span>
+        <div class="level-main">
+          <div class="level-top">
+            <span id="levelTitleBig">Уровень 1</span>
+            <span class="muted" id="levelNumsBig">0 из 50 XP</span>
+          </div>
+          <div class="level-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Прогресс уровня">
+            <i id="levelBarBig"></i>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div class="stat-grid">
       <div class="stat"><div class="num" id="statStreak">0</div><div class="cap">дней подряд</div></div>
       <div class="stat"><div class="num" id="statBest">0</div><div class="cap">лучшая серия</div></div>
@@ -200,6 +242,17 @@
     <section class="card">
       <div class="card-head"><h2>Последние 14 дней</h2><span class="count" id="barsCount"></span></div>
       <div class="bars" id="bars" role="list" aria-label="Сделано задач по дням за 14 дней"></div>
+    </section>
+
+    <section class="card" aria-labelledby="hSkills">
+      <div class="card-head">
+        <h2 id="hSkills">Навыки</h2>
+        <span class="count" id="skillCount"></span>
+        <span class="spacer"></span>
+        <button class="btn tiny primary" id="addSkill" type="button">+ Навык</button>
+      </div>
+      <div class="skill-grid" id="skillGrid"></div>
+      <p class="empty" id="skillEmpty">Опыт появится, когда выполнишь первую задачу.</p>
     </section>
 
     <section class="card" aria-labelledby="hReview">
@@ -255,6 +308,14 @@
       <div class="setting">
         <span class="label">Системное разрешение<span class="sub" id="permState">—</span></span>
         <button class="btn tiny ghost" id="askNotify" type="button">Разрешить</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Опыт</h2></div>
+      <div class="setting">
+        <span class="label">Дизмораль<span class="sub">−15% опыта навыка за каждый день простоя после двух. Не отключается.</span></span>
+        <span class="count u-danger">всегда</span>
       </div>
     </section>
 
