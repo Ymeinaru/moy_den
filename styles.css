@@ -1858,3 +1858,17 @@ html[data-theme="light"] .seg button[data-prio="low"][aria-pressed="true"] { col
   .mday-num { font-size: 14px; }
   #page-money .money-stats .num { font-size: 26px; }
 }
+
+/* категория как кнопка */
+button.cat-item {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+button.cat-item:hover { background: var(--surface-2); }

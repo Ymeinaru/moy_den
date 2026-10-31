@@ -985,7 +985,10 @@
     catBox.textContent = '';
 
     cats.forEach(function (row) {
-      var item = el('div', 'cat-item');
+      var item = el('button', 'cat-item');
+      item.type = 'button';
+      item.dataset.fkey = 'cat:' + row.cat.id;
+      item.onclick = function () { catSheet(row.cat.id); };
       var line = el('div', 'cat-row');
       var em = el('span', 'cat-em');
       em.textContent = row.cat.emoji;
@@ -2417,6 +2420,127 @@
     });
   }
 
+  /* ───────────────────────── Деньги: категория ───────────────────────── */
+  function catSheet(id) {
+    var doc = moneyDoc();
+    var cat = null;
+    doc.cats.forEach(function (c) { if (c.id === id) cat = c; });
+
+    var kind = cat ? (cat.kind || 'expense') : 'expense';
+
+    openSheet(function (sheet) {
+      var h = el('h2');
+      h.textContent = cat ? 'Категория' : 'Новая категория';
+      sheet.appendChild(h);
+
+      var f1 = el('div', 'field');
+      var l1 = el('label');
+      l1.setAttribute('for', 'cName');
+      l1.textContent = 'Название';
+      var name = el('input', 'input');
+      name.id = 'cName';
+      name.type = 'text';
+      name.maxLength = 40;
+      name.value = cat ? cat.name : '';
+      name.placeholder = 'Например: Кафе';
+      name.autocomplete = 'off';
+      f1.appendChild(l1);
+      f1.appendChild(name);
+      sheet.appendChild(f1);
+
+      var f2 = el('div', 'field');
+      var l2 = el('label');
+      l2.setAttribute('for', 'cEmoji');
+      l2.textContent = 'Значок (один символ)';
+      var emoji = el('input', 'input');
+      emoji.id = 'cEmoji';
+      emoji.type = 'text';
+      emoji.maxLength = 2;
+      emoji.value = cat ? cat.emoji : '🏷️';
+      emoji.placeholder = '🏷️';
+      f2.appendChild(l2);
+      f2.appendChild(emoji);
+      sheet.appendChild(f2);
+
+      var f3 = el('div', 'field');
+      var l3 = el('span', 'field-label');
+      l3.textContent = 'Тип';
+      var seg = el('div', 'seg');
+      [['expense', 'Расход'], ['income', 'Доход']].forEach(function (pair) {
+        var btn = el('button');
+        btn.type = 'button';
+        btn.dataset.kind = pair[0];
+        btn.textContent = pair[1];
+        btn.setAttribute('aria-pressed', kind === pair[0] ? 'true' : 'false');
+        btn.onclick = function () {
+          kind = pair[0];
+          Array.prototype.forEach.call(seg.children, function (b) {
+            b.setAttribute('aria-pressed', b.dataset.kind === kind ? 'true' : 'false');
+          });
+        };
+        seg.appendChild(btn);
+      });
+      f3.appendChild(l3);
+      f3.appendChild(seg);
+      sheet.appendChild(f3);
+
+      var actions = el('div', 'sheet-actions');
+      var cancel = el('button', 'btn ghost');
+      cancel.type = 'button';
+      cancel.textContent = 'Отмена';
+      cancel.onclick = closeSheet;
+      actions.appendChild(cancel);
+
+      if (cat && (cat.kind || 'expense')) {
+        var del = el('button', 'btn ghost');
+        del.type = 'button';
+        del.textContent = 'Удалить';
+        del.style.color = 'var(--danger)';
+        del.onclick = function () {
+          var fresh = moneyDoc();
+          if (cat.id === 'other') { toast('«Прочее» удалить нельзя'); return; }
+          fresh.entries.forEach(function (x) {
+            if (x.cat === cat.id) x.cat = 'other';
+          });
+          fresh.cats = fresh.cats.filter(function (c) { return c.id !== cat.id; });
+          Den.saveDoc(fresh);
+          closeSheet();
+          toast('Категория удалена, записи в «Прочее»');
+        };
+        actions.appendChild(del);
+      }
+
+      var save = el('button', 'btn primary');
+      save.type = 'button';
+      save.textContent = cat ? 'Сохранить' : 'Добавить';
+      save.onclick = function () {
+        var value = name.value.trim();
+        if (!value) { name.focus(); toast('Нужно название'); return; }
+
+        var fresh = moneyDoc();
+        var icon = emoji.value.trim() || '🏷️';
+
+        if (cat) {
+          fresh.cats.forEach(function (c) {
+            if (c.id === cat.id) { c.name = value; c.emoji = icon; c.kind = kind; }
+          });
+        } else {
+          fresh.cats.push({ id: 'c' + Date.now().toString(36), name: value, emoji: icon, kind: kind });
+        }
+
+        Den.saveDoc(fresh);
+        closeSheet();
+        toast(cat ? 'Сохранено' : 'Категория добавлена');
+      };
+      actions.appendChild(save);
+      sheet.appendChild(actions);
+
+      name.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); save.click(); }
+      };
+    });
+  }
+
   /* ───────────────────────── Навык: редактор ───────────────────────── */
   /* Удаление навыка: его задачи и привычки переводим на «Разное»,
      чтобы опыт не пропал из интерфейса. */
@@ -3303,6 +3427,7 @@
     });
 
     $('addMoney').onclick = function () { moneySheet(); };
+    $('addCat').onclick = function () { catSheet(); };
     $('moneyPrev').onclick = function () {
       state.moneyMonth = shiftMonth(state.moneyMonth, -1);
       renderMoney();
@@ -3646,10 +3771,15 @@
     if (state.date === t && !editing) renderDay();
   }
 
+  var BUILD = 'b10';
+
   function registerSw() {
     if (!('serviceWorker' in navigator)) return;
     if (location.protocol === 'file:') return;
-    navigator.serviceWorker.register('sw.js').catch(function () {});
+    // ?b= обходит 10-минутный кэш GitHub Pages: новый service worker
+    // подхватывается сразу, а не после истечения max-age.
+    var url = location.protocol === 'https:' ? 'sw.js?b=' + BUILD : 'sw.js';
+    navigator.serviceWorker.register(url).catch(function () {});
   }
 
   function init() {
