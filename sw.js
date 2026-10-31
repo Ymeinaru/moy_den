@@ -1,5 +1,5 @@
 /* Service worker: оболочка приложения — из кэша, Supabase — всегда из сети. */
-const CACHE = 'moy-den-v7';
+const CACHE = 'moy-den-v9';
 const ASSETS = [
   './',
   'index.html',

@@ -15,6 +15,18 @@
   var SKILLS_KEY = 'skills';
   var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   var HABIT_XP = 0.25;
+  var MONEY_CATS = [
+    { id: 'food', name: 'Продукты', emoji: '🛒', kind: 'expense' },
+    { id: 'home', name: 'Жильё', emoji: '🏠', kind: 'expense' },
+    { id: 'transport', name: 'Транспорт', emoji: '🚌', kind: 'expense' },
+    { id: 'health', name: 'Здоровье', emoji: '💊', kind: 'expense' },
+    { id: 'fun', name: 'Развлечения', emoji: '🎬', kind: 'expense' },
+    { id: 'credit', name: 'Кредиты', emoji: '🏦', kind: 'expense' },
+    { id: 'other', name: 'Прочее', emoji: '🧾', kind: 'expense' },
+    { id: 'salary', name: 'Зарплата', emoji: '💰', kind: 'income' },
+    { id: 'extra', name: 'Подработка', emoji: '💸', kind: 'income' }
+  ];
+
   var REPEATS = [
     { id: '', label: 'Не повторять' },
     { id: 'day', label: 'Каждый день' },
@@ -40,6 +52,9 @@
     view: 'day',
     habitWeek: null,
     weekStart: null,
+    weekMode: 'week',
+    monthKey: null,
+    moneyMonth: null,
     lastFocus: null,
     timer: null
   };
@@ -299,6 +314,44 @@
       if (t.done) { done++; minutes += estOf(t); }
     });
     return { total: tasks.length, done: done, minutes: minutes };
+  }
+
+  function moneyDoc() {
+    var doc = Den.getDoc('money', { entries: [], cats: [] });
+    if (!Array.isArray(doc.entries)) doc.entries = [];
+    if (!Array.isArray(doc.cats) || !doc.cats.length) {
+      doc.cats = MONEY_CATS.map(function (c) { return { id: c.id, name: c.name, emoji: c.emoji, kind: c.kind }; });
+    }
+    return doc;
+  }
+
+  function moneyCat(id) {
+    var list = moneyDoc().cats;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return { id: 'other', name: 'Прочее', emoji: '🧾', kind: 'expense' };
+  }
+
+  function fmtMoney(value) {
+    var n = Math.round(Number(value) || 0);
+    return n.toLocaleString('ru-RU') + ' ₽';
+  }
+
+  function monthKeyOf(date) { return String(date).slice(0, 7); }
+
+  function shiftMonth(key, delta) {
+    var y = Number(key.slice(0, 4));
+    var m = Number(key.slice(5, 7)) - 1 + delta;
+    var d = new Date(y, m, 1, 12);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1);
+  }
+
+  var MONTH_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+  function monthTitle(key) {
+    var y = Number(key.slice(0, 4));
+    var m = Number(key.slice(5, 7)) - 1;
+    return MONTH_NOM[m] + ' ' + y;
   }
 
   function skillsDoc() {
@@ -754,6 +807,8 @@
 
     renderReviewCta(day);
     renderXpCard();
+    renderBadHabits();
+    renderMoneyDay();
     updateSyncUI();
   }
 
@@ -895,12 +950,266 @@
     });
   }
 
+  function renderMoney() {
+    var doc = moneyDoc();
+    var month = state.moneyMonth;
+    var entries = doc.entries.filter(function (e) { return monthKeyOf(e.date) === month; });
+
+    var income = 0;
+    var expense = 0;
+    entries.forEach(function (e) {
+      var v = Number(e.amount) || 0;
+      if (e.type === 'income') income += v;
+      else expense += v;
+    });
+
+    $('moneyLabel').textContent = monthTitle(month);
+    var incomeR = Math.round(income);
+    var expenseR = Math.round(expense);
+    $('moneyIn').textContent = fmtMoney(incomeR);
+    $('moneyOut').textContent = fmtMoney(expenseR);
+    $('moneyLeft').textContent = fmtMoney(incomeR - expenseR);
+
+    var byCat = {};
+    entries.forEach(function (e) {
+      if (e.type !== 'expense') return;
+      byCat[e.cat] = (byCat[e.cat] || 0) + (Number(e.amount) || 0);
+    });
+
+    var cats = Object.keys(byCat).map(function (id) {
+      return { cat: moneyCat(id), sum: byCat[id] };
+    }).sort(function (a, b) { return b.sum - a.sum; });
+
+    var max = cats.length ? cats[0].sum : 1;
+    var catBox = $('moneyCats');
+    catBox.textContent = '';
+
+    cats.forEach(function (row) {
+      var item = el('div', 'cat-item');
+      var line = el('div', 'cat-row');
+      var em = el('span', 'cat-em');
+      em.textContent = row.cat.emoji;
+      var name = el('span', 'cat-name');
+      name.textContent = row.cat.name;
+      var sum = el('span', 'cat-sum');
+      sum.textContent = fmtMoney(row.sum);
+      line.appendChild(em);
+      line.appendChild(name);
+      line.appendChild(sum);
+
+      var bar = el('div', 'cat-bar');
+      var fill = el('i');
+      fill.style.width = Math.round(row.sum / max * 100) + '%';
+      bar.appendChild(fill);
+
+      item.appendChild(line);
+      item.appendChild(bar);
+      catBox.appendChild(item);
+    });
+
+    $('moneyCatCount').textContent = cats.length
+      ? cats.length + ' ' + plural(cats.length, 'категория', 'категории', 'категорий')
+      : '';
+    $('moneyEmpty').hidden = entries.length > 0;
+
+    var list = $('moneyList');
+    list.textContent = '';
+    $('moneyCount').textContent = entries.length ? entries.length + ' шт.' : '';
+
+    entries.slice().sort(function (a, b) {
+      return String(b.date).localeCompare(String(a.date)) || (b.updatedAt || 0) - (a.updatedAt || 0);
+    }).forEach(function (e) {
+      var cat = moneyCat(e.cat);
+      var row = el('button', 'money-row');
+      row.type = 'button';
+      row.dataset.fkey = 'money:' + e.id;
+
+      var em = el('span', 'money-em');
+      em.textContent = cat.emoji;
+
+      var main = el('span', 'money-main');
+      var title = el('span', 'money-title');
+      title.textContent = e.note || cat.name;
+      var sub = el('span', 'money-sub');
+      sub.textContent = shortDate(e.date) + ' · ' + cat.name;
+      main.appendChild(title);
+      main.appendChild(sub);
+
+      var amount = el('span', 'money-amount' + (e.type === 'income' ? ' is-in' : ''));
+      amount.textContent = (e.type === 'income' ? '+' : '−') + fmtMoney(e.amount);
+
+      row.appendChild(em);
+      row.appendChild(main);
+      row.appendChild(amount);
+      row.onclick = function () { moneySheet(e.id); };
+      list.appendChild(row);
+    });
+  }
+
+  function renderMoneyDay() {
+    var box = $('moneyDay');
+    if (!box) return;
+    box.textContent = '';
+
+    var rows = moneyDoc().entries.filter(function (e) { return e.date === state.date; });
+    if (!rows.length) {
+      var hint = el('span', 'money-empty');
+      hint.textContent = 'Нет записей за этот день';
+      box.appendChild(hint);
+      return;
+    }
+
+    var income = 0;
+    var expense = 0;
+    rows.forEach(function (e) {
+      var v = Number(e.amount) || 0;
+      if (e.type === 'income') income += v;
+      else expense += v;
+    });
+
+    var top = el('div', 'money-day-line');
+    var minus = el('span', 'money-amount');
+    minus.textContent = '−' + fmtMoney(expense);
+    var plus = el('span', 'money-amount is-in');
+    plus.textContent = '+' + fmtMoney(income);
+    top.appendChild(minus);
+    top.appendChild(plus);
+    box.appendChild(top);
+
+    rows.slice(0, 3).forEach(function (e) {
+      var cat = moneyCat(e.cat);
+      var line = el('div', 'money-day-row');
+      var em = el('span', 'money-em');
+      em.textContent = cat.emoji;
+      var title = el('span', 'money-title');
+      title.textContent = e.note || cat.name;
+      var amount = el('span', 'money-amount' + (e.type === 'income' ? ' is-in' : ''));
+      amount.textContent = (e.type === 'income' ? '+' : '−') + fmtMoney(e.amount);
+      line.appendChild(em);
+      line.appendChild(title);
+      line.appendChild(amount);
+      box.appendChild(line);
+    });
+
+    if (rows.length > 3) {
+      var more = el('span', 'money-empty');
+      more.textContent = 'и ещё ' + (rows.length - 3);
+      box.appendChild(more);
+    }
+  }
+
+  function renderBadHabits() {
+    var card = $('badCard');
+    if (!card) return;
+
+    var items = habitsDoc().items.filter(function (h) { return h.kind === 'bad'; });
+    card.hidden = items.length === 0;
+    if (!items.length) return;
+
+    var list = $('badList');
+    list.textContent = '';
+
+    var hits = 0;
+    items.forEach(function (h) {
+      var on = habitDone(h, state.date);
+      if (on) hits += 1;
+
+      var row = el('button', 'bad-row' + (on ? ' is-hit' : ''));
+      row.type = 'button';
+      row.setAttribute('aria-pressed', on ? 'true' : 'false');
+      row.setAttribute('aria-label', h.name + (on ? ' — было' : ' — не было'));
+      row.dataset.fkey = 'bad:' + h.id + ':' + state.date;
+
+      var name = el('span', 'bad-name');
+      name.textContent = h.name;
+
+      var mark = el('span', 'bad-mark');
+      mark.textContent = on ? 'было' : 'нет';
+
+      row.appendChild(name);
+      row.appendChild(mark);
+      row.onclick = function () { toggleHabit(h.id, state.date); };
+      list.appendChild(row);
+    });
+
+    $('badCount').textContent = hits + ' из ' + items.length;
+  }
+
+  function renderMonth() {
+    var key = state.monthKey;
+    var y = Number(key.slice(0, 4));
+    var m = Number(key.slice(5, 7)) - 1;
+
+    var first = new Date(y, m, 1, 12);
+    var offset = (first.getDay() + 6) % 7;
+    var start = shiftYmd(ymd(first), -offset);
+
+    var grid = $('monthGrid');
+    grid.textContent = '';
+
+    ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].forEach(function (label) {
+      var head = el('div', 'month-head');
+      head.textContent = label;
+      grid.appendChild(head);
+    });
+
+    var monthDone = 0;
+    var monthTotal = 0;
+
+    for (var i = 0; i < 42; i++) {
+      var date = shiftYmd(start, i);
+      var d = parseYmd(date);
+      var st = dayStats(date);
+      var outside = d.getMonth() !== m;
+
+      if (!outside) {
+        monthDone += st.done;
+        monthTotal += st.total;
+      }
+
+      var cell = el('button', 'month-day' +
+        (outside ? ' is-out' : '') +
+        (date === todayStr() ? ' is-today' : ''));
+      cell.type = 'button';
+      cell.dataset.fkey = 'mday:' + date;
+
+      var num = el('span', 'mday-num');
+      num.textContent = String(d.getDate());
+      cell.appendChild(num);
+
+      if (st.total && !outside) {
+        var dots = el('span', 'mday-dots');
+        var filled = st.done ? Math.max(1, Math.round(st.done / st.total * 3)) : 0;
+        for (var k = 0; k < 3; k++) {
+          var dot = el('i');
+          if (k < filled) dot.className = 'on';
+          dots.appendChild(dot);
+        }
+        cell.appendChild(dots);
+      }
+
+      cell.setAttribute('aria-label', shortDate(date) + ': ' +
+        (st.total ? st.done + ' из ' + st.total + ' задач' : 'нет задач'));
+
+      (function (target) {
+        cell.onclick = function () {
+          setDate(target);
+          setView('day');
+        };
+      })(date);
+
+      grid.appendChild(cell);
+    }
+
+    $('weekNote').textContent = 'За месяц: ' + monthDone + ' из ' + monthTotal + ' задач';
+  }
+
   function renderHabitChips() {
     var box = $('habitChips');
     if (!box) return;
     box.textContent = '';
 
-    var items = habitsDoc().items;
+    var items = habitsDoc().items.filter(function (h) { return h.kind !== 'bad'; });
     $('habitChipsCount').textContent = items.length
       ? habitsStat(state.date).done + '/' + items.length
       : '';
@@ -1101,6 +1410,20 @@
   }
 
   function renderWeek() {
+    var mode = state.weekMode || 'week';
+    $('weekGrid').hidden = mode === 'month';
+    $('monthGrid').hidden = mode !== 'month';
+
+    Array.prototype.forEach.call($('viewSeg').children, function (b) {
+      b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false');
+    });
+
+    if (mode === 'month') {
+      $('weekLabel').textContent = monthTitle(state.monthKey);
+      renderMonth();
+      return;
+    }
+
     var start = state.weekStart;
     $('weekLabel').textContent = weekLabel(start);
 
@@ -1480,6 +1803,20 @@
       cancel.type = 'button';
       cancel.textContent = 'Отмена';
       cancel.onclick = closeSheet;
+
+      if (task) {
+        var del = el('button', 'btn ghost');
+        del.type = 'button';
+        del.textContent = 'Удалить';
+        del.style.color = 'var(--danger)';
+        del.setAttribute('aria-label', 'Удалить задачу');
+        del.onclick = function () {
+          closeSheet();
+          setTimeout(function () { removeTask(task.id); }, 120);
+        };
+        actions.appendChild(del);
+      }
+
       var save = el('button', 'btn primary');
       save.type = 'button';
       save.textContent = task ? 'Сохранить' : 'Добавить';
@@ -1910,6 +2247,173 @@
       name.onkeydown = function (e) {
         if (e.key === 'Enter') { e.preventDefault(); save.click(); }
       };
+    });
+  }
+
+  /* ───────────────────────── Деньги: редактор ───────────────────────── */
+  function moneySheet(id) {
+    var doc = moneyDoc();
+    var entry = null;
+    doc.entries.forEach(function (e) { if (e.id === id) entry = e; });
+
+    var draft = {
+      type: entry ? entry.type : 'expense',
+      cat: entry ? entry.cat : 'food'
+    };
+
+    openSheet(function (sheet) {
+      var h = el('h2');
+      h.textContent = entry ? 'Запись' : 'Новая запись';
+      sheet.appendChild(h);
+
+      var fType = el('div', 'field');
+      var seg = el('div', 'seg');
+      [['expense', 'Расход'], ['income', 'Доход']].forEach(function (pair) {
+        var btn = el('button');
+        btn.type = 'button';
+        btn.dataset.kind = pair[0];
+        btn.textContent = pair[1];
+        btn.setAttribute('aria-pressed', draft.type === pair[0] ? 'true' : 'false');
+        btn.onclick = function () {
+          draft.type = pair[0];
+          Array.prototype.forEach.call(seg.children, function (b) {
+            b.setAttribute('aria-pressed', b.dataset.kind === draft.type ? 'true' : 'false');
+          });
+          draft.cat = draft.type === 'income' ? 'salary' : 'food';
+          drawCats();
+        };
+        seg.appendChild(btn);
+      });
+      fType.appendChild(seg);
+      sheet.appendChild(fType);
+
+      var fAmount = el('div', 'field');
+      var lAmount = el('label');
+      lAmount.setAttribute('for', 'mAmount');
+      lAmount.textContent = 'Сумма, ₽';
+      var amount = el('input', 'input');
+      amount.id = 'mAmount';
+      amount.type = 'text';
+      amount.inputMode = 'decimal';
+      amount.autocomplete = 'off';
+      amount.value = entry ? String(entry.amount) : '';
+      amount.placeholder = '0';
+      fAmount.appendChild(lAmount);
+      fAmount.appendChild(amount);
+      sheet.appendChild(fAmount);
+
+      var fCat = el('div', 'field');
+      var lCat = el('span', 'field-label');
+      lCat.textContent = 'Категория';
+      var catBox = el('div', 'chips');
+      fCat.appendChild(lCat);
+      fCat.appendChild(catBox);
+      sheet.appendChild(fCat);
+
+      function drawCats() {
+        catBox.textContent = '';
+        moneyDoc().cats.filter(function (c) {
+          return (c.kind || 'expense') === draft.type;
+        }).forEach(function (c) {
+          var chip = el('button', 'chip');
+          chip.type = 'button';
+          chip.dataset.cat = c.id;
+          chip.textContent = c.emoji + ' ' + c.name;
+          chip.setAttribute('aria-pressed', draft.cat === c.id ? 'true' : 'false');
+          chip.onclick = function () {
+            draft.cat = c.id;
+            Array.prototype.forEach.call(catBox.children, function (b) {
+              b.setAttribute('aria-pressed', b.dataset.cat === draft.cat ? 'true' : 'false');
+            });
+          };
+          catBox.appendChild(chip);
+        });
+      }
+      drawCats();
+
+      var fDate = el('div', 'field');
+      var lDate = el('label');
+      lDate.setAttribute('for', 'mDate');
+      lDate.textContent = 'Дата';
+      var date = el('input', 'input');
+      date.id = 'mDate';
+      date.type = 'date';
+      date.value = entry ? entry.date : (state.date || todayStr());
+      fDate.appendChild(lDate);
+      fDate.appendChild(date);
+      sheet.appendChild(fDate);
+
+      var fNote = el('div', 'field');
+      var lNote = el('label');
+      lNote.setAttribute('for', 'mNote');
+      lNote.textContent = 'Комментарий (необязательно)';
+      var note = el('input', 'input');
+      note.id = 'mNote';
+      note.type = 'text';
+      note.maxLength = 120;
+      note.value = entry ? (entry.note || '') : '';
+      note.placeholder = 'Например: пятёрочка';
+      fNote.appendChild(lNote);
+      fNote.appendChild(note);
+      sheet.appendChild(fNote);
+
+      var actions = el('div', 'sheet-actions');
+      var cancel = el('button', 'btn ghost');
+      cancel.type = 'button';
+      cancel.textContent = 'Отмена';
+      cancel.onclick = closeSheet;
+      actions.appendChild(cancel);
+
+      if (entry) {
+        var del = el('button', 'btn ghost');
+        del.type = 'button';
+        del.textContent = 'Удалить';
+        del.style.color = 'var(--danger)';
+        del.onclick = function () {
+          var fresh = moneyDoc();
+          fresh.entries = fresh.entries.filter(function (x) { return x.id !== entry.id; });
+          Den.saveDoc(fresh);
+          closeSheet();
+          toast('Запись удалена');
+        };
+        actions.appendChild(del);
+      }
+
+      var save = el('button', 'btn primary');
+      save.type = 'button';
+      save.textContent = entry ? 'Сохранить' : 'Добавить';
+      save.onclick = function () {
+        var value = Number(String(amount.value).replace(/\s/g, '').replace(',', '.'));
+        if (!value || value <= 0) { amount.focus(); toast('Нужна сумма'); return; }
+
+        var fresh = moneyDoc();
+        var row = {
+          type: draft.type,
+          cat: draft.cat,
+          amount: value,
+          date: date.value || todayStr(),
+          note: note.value.trim(),
+          updatedAt: Date.now()
+        };
+
+        if (entry) {
+          fresh.entries.forEach(function (x) {
+            if (x.id === entry.id) {
+              x.type = row.type; x.cat = row.cat; x.amount = row.amount;
+              x.date = row.date; x.note = row.note; x.updatedAt = row.updatedAt;
+            }
+          });
+        } else {
+          row.id = Den.newId();
+          fresh.entries.push(row);
+        }
+
+        Den.saveDoc(fresh);
+        closeSheet();
+        toast('Сохранено');
+      };
+      actions.appendChild(save);
+      sheet.appendChild(actions);
     });
   }
 
@@ -2392,6 +2896,16 @@
     }]);
   }
 
+  function refreshPushSub() {
+    if (!Den.getSettings().push) return Promise.resolve(false);
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return Promise.resolve(false);
+
+    return navigator.serviceWorker.ready
+      .then(function (reg) { return reg.pushManager.getSubscription(); })
+      .then(function (sub) { return sub ? savePushSub(sub) : false; })
+      .catch(function () { return false; });
+  }
+
   function enablePush() {
     var vapid = Den.getSettings().vapidPublicKey;
     if (!vapid) { toast('Нет VAPID-ключа в config.js'); return Promise.resolve(false); }
@@ -2662,7 +3176,7 @@
   }
 
   /* ───────────────────────── Навигация ───────────────────────── */
-  var VIEWS = ['day', 'habits', 'week', 'stats', 'settings'];
+  var VIEWS = ['day', 'habits', 'week', 'money', 'stats', 'settings'];
 
   function setView(view) {
     state.view = view;
@@ -2678,6 +3192,7 @@
 
     if (view === 'habits') renderHabits();
     if (view === 'week') renderWeek();
+    if (view === 'money') renderMoney();
     if (view === 'stats') renderStats();
     if (view === 'settings') renderSettings();
   }
@@ -2765,16 +3280,36 @@
     };
 
     $('weekPrev').onclick = function () {
-      state.weekStart = shiftYmd(state.weekStart, -7);
+      if (state.weekMode === 'month') state.monthKey = shiftMonth(state.monthKey, -1);
+      else state.weekStart = shiftYmd(state.weekStart, -7);
       renderWeek();
     };
     $('weekNext').onclick = function () {
-      state.weekStart = shiftYmd(state.weekStart, 7);
+      if (state.weekMode === 'month') state.monthKey = shiftMonth(state.monthKey, 1);
+      else state.weekStart = shiftYmd(state.weekStart, 7);
       renderWeek();
     };
     $('weekToday').onclick = function () {
       state.weekStart = mondayOf(todayStr());
+      state.monthKey = todayStr().slice(0, 7);
       renderWeek();
+    };
+
+    Array.prototype.forEach.call($('viewSeg').children, function (btn) {
+      btn.onclick = function () {
+        state.weekMode = btn.dataset.mode;
+        renderWeek();
+      };
+    });
+
+    $('addMoney').onclick = function () { moneySheet(); };
+    $('moneyPrev').onclick = function () {
+      state.moneyMonth = shiftMonth(state.moneyMonth, -1);
+      renderMoney();
+    };
+    $('moneyNext').onclick = function () {
+      state.moneyMonth = shiftMonth(state.moneyMonth, 1);
+      renderMoney();
     };
 
     $('weekGrid').addEventListener('click', function (e) {
@@ -2846,7 +3381,12 @@
       Den.setSettings({ dayReviewHour: Number(String(this.value).split(':')[0]) });
       renderDay();
     };
-    $('setLead').onchange = function () { Den.setSettings({ leadMin: Number(this.value) }); };
+    $('setLead').onchange = function () {
+      Den.setSettings({ leadMin: Number(this.value) });
+      refreshPushSub().then(function (ok) {
+        if (ok) toast('Время напоминания обновлено');
+      });
+    };
     $('setTheme').onchange = function () { Den.setSettings({ theme: this.value }); applyTheme(); };
     $('setNotify').onchange = function () {
       Den.setSettings({ notify: this.checked });
@@ -2915,6 +3455,62 @@
     });
 
     $('printView').onclick = function () { window.print(); };
+
+    $('calendarFeed').onclick = function () {
+      var base = String(Den.getSettings().supabaseUrl || '').replace(/\/+$/, '');
+      if (!base) { toast('Сначала подключи Supabase'); return; }
+
+      var url = base + '/functions/v1/calendar';
+      var webcal = 'webcal://' + url.replace(/^https?:\/\//, '');
+
+      openSheet(function (sheet) {
+        var h = el('h2');
+        h.textContent = 'Подписка в Календаре';
+        sheet.appendChild(h);
+
+        var hint = el('p', 'hint');
+        hint.textContent = 'Скопируй ссылку и добавь её в Календарь как подписной календарь. ' +
+          'События и будильники будут обновляться сами — сервер и push не нужны.';
+        sheet.appendChild(hint);
+
+        var input = el('input', 'input');
+        input.type = 'text';
+        input.readOnly = true;
+        input.value = webcal;
+        sheet.appendChild(input);
+
+        var actions = el('div', 'sheet-actions');
+
+        var open = el('button', 'btn ghost');
+        open.type = 'button';
+        open.textContent = 'Открыть';
+        open.onclick = function () { global.location.href = webcal; };
+
+        var copy = el('button', 'btn primary');
+        copy.type = 'button';
+        copy.textContent = 'Скопировать';
+        copy.onclick = function () {
+          function done() { toast('Ссылка скопирована'); }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(webcal).then(done).catch(function () {
+              input.select();
+              try { document.execCommand('copy'); } catch (e) {}
+              done();
+            });
+          } else {
+            input.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            done();
+          }
+        };
+
+        actions.appendChild(open);
+        actions.appendChild(copy);
+        sheet.appendChild(actions);
+
+        setTimeout(function () { input.select(); }, 120);
+      });
+    };
 
     /* перетаскивание блоков мышью */
     $('blocks').addEventListener('pointerdown', function (event) {
@@ -3026,6 +3622,7 @@
     renderDay();
     if (state.view === 'habits') renderHabits();
     if (state.view === 'week') renderWeek();
+    if (state.view === 'money') renderMoney();
     if (state.view === 'stats') renderStats();
   }
 
@@ -3060,6 +3657,8 @@
     state.lastToday = todayStr();
     state.habitWeek = mondayOf(state.date);
     state.weekStart = mondayOf(state.date);
+    state.monthKey = state.date.slice(0, 7);
+    state.moneyMonth = state.date.slice(0, 7);
 
     applyTheme();
     bind();
